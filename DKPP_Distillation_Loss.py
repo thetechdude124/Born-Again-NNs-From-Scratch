@@ -26,7 +26,13 @@ class DKPP_DistillationLoss(Function):
         t_pred_labels = torch.max(t_smax_preds, dim = 1)
         #Subtract both tensors and normalize by 1/b (where b is batch size) to obtain first term of gradient expression
         batch_size = s_pred_labels.shape[0].item()
-        first_grad_term = batch_size * torch.subtract(s_pred_labels, t_pred_labels)
+        first_grad_term = (1 / batch_size) * torch.subtract(s_pred_labels, t_pred_labels)
         #Next, subtract the DK student logits by the permuted DK teacher logits and normalize once again to obtain second gradient term
-        torch.subtract(s_smax_preds)
-        return grad_output
+        #Access the indexes of the first dimension (the index of the rows) and use .randperm to shuffle indexes
+        #Then, simply re-arrange the tensor with the new indexes to obtain the shuffled tensor
+        permuted_indexes = torch.randperm(t_smax_preds.shape[0])
+        permuted_DK_terms = t_smax_preds[permuted_indexes]
+        second_grad_term = (1 / batch_size) * torch.subtract(s_smax_preds, permuted_DK_terms)
+        #Add the first and second terms together and return as grad_input
+        grad_input = torch.add(first_grad_term, second_grad_term)
+        return grad_input, grad_output
