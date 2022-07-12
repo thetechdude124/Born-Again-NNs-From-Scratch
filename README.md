@@ -105,14 +105,18 @@ Let's suppose for a second, that instead of the $i_{th}$ element of the predicti
 
 Let's now draw our attention back to $p_i$, which is the SoftMax of the given element. Since we are on the highest element (the "true" prediction) and it perfectly matches the "target" distribution (the distribution of the actual dataset - **remember that the dataset, after being one-hot encoded, just has 1 for the true class and 0 for everything else**), then this term **will simply yield 1**!
 
-So, the **partial derivative when the teacher's true prediction exactly matches the target distribution (and when we are iterating over that true prediction $*$)**
+So, the **partial derivative when the teacher's true prediction exactly matches the target distribution (and when we are iterating over that true prediction $*$)** is:
+
 $$ \frac{∂l_i}{∂z_i}=q_i-p_i=\frac{e^{z_i}}{Σ_{j=1}^ne^{z_j}}-1.0 $$
 
-Let's now consider taking **the partial derivative across not just the $i_{th}$ sample, but an entire batch of size $b$.** We can add these **partial derivatives together to obtain the AVERAGE PARTIAL DERIVATIVE for each batch - simply divide by the batch size:**
+Now that we know the partial derivative of the loss function iterating over one sample, let's consider what would happen if we were to iterate across not only the $i_th$ sample, but an entire batch of size $b$. Since we want to find the **average loss** for the entire batch, we can divide the sum of the loss function applied to $x_1, t_1...x_b, t_b$ (where $x_n$ is the prediction and $t_n$ is the true label) by the batch size. **So, the loss of an entire minibatch is given by:**
 
-$$ L(x_1,t_1..x_b,t_b)=\frac{1}{b}\sum^{b}_{s=1}L(x_s,t_s) $$
+$$ \ell(x_1,t_1..x_b,t_b)=\frac{1}{b}\sum^{b}_{s=1}\ell(x_s,t_s) $$
 
+So, if we wanted to find the gradient of this loss over the batch, we would simply find the average gradient across all the PREDICTED samples, right (the predicted sample being the highest probability)? In other words, we would take $q_*-p_*$ for each sample in the minibatch and then average it. This yields:
 
-In this case, let $n$ represent each *individual prediction* (iterating over Dog, Car, Train, and Cat for each and every probability distribution rather than just iterating over each distribution). Now, let's take the average **partial derivative** instead of the average loss function - in other words, **let's find the partial derivative of the above average loss to yield the average gradient for a given parameter across a minibatch.**
+$$ frac{1}{b}\sum^b_{s=1}}\frac{∂L_{i,s}}{∂z_{i,s}}=\frac{1}{b}\sum^{b}_{s=1}(q_{*,s}-p_{*,s}) $$
+
+But, this is missing some key information - namely, **the Dark Knowledge hidden inside the remainder of the probability distribution.** We are computing the gradients over **the true predictions, but NOT the gradients for each probability inside each sample.** We can fix this by adding another term - a **Dark Knowledge Term** - that **for each sample iterates over 
 
 $$ \frac{1}{b}\sum^b_{s=1}\sum^n_{i=1}\frac{∂L_{i,s}}{∂z_{i,s}}=\frac{1}{b}\sum^{b}_{s=1}(q_{*,s}-p_{*,s})+\frac{1}{b}\sum^b_{s=1}\sum^{n-1}_{i=1}(q_{i,s}-p_{i,s}) $$
