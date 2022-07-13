@@ -10,7 +10,8 @@ class CWTM_DistillationLoss(Function):
         #Save both prediction tensors into context object for gradient computations
         #We want to save the NORMALIZED (softmax activated) versions of each tensor as opposed to the raw probabilities - normalize the values first, and then save
         softmax = torch.nn.Softmax(dim = 1) #Perform across each row (each row sums to 1)
-        ctx.save_for_backward(softmax(s_preds), softmax(t_preds), softmax(true_preds))
+        #True predictions are already encoded; they do not require softmax
+        ctx.save_for_backward(softmax(s_preds), softmax(t_preds), true_preds)
         #Use Cross Entropy Loss - the neural networks used in this project are not softmax activated (raw logits), and the softmax conversion done above does not affect the actual tensors
         loss = torch.nn.BCEWithLogitsLoss()
         return loss(s_preds, t_preds)
@@ -21,18 +22,19 @@ class CWTM_DistillationLoss(Function):
         #Implement Equation 10 from the BAN paper https://proceedings.mlr.press/v80/furlanello18a/furlanello18a.pdf
         #Obtain labels from the saved tensors
         s_smax_preds, t_smax_preds, true_preds = ctx.saved_tensors
-        #Find the predicted labels from both the student and the teacher for that sample (discard the indicies tensor)
-        s_pred_labels, idx = torch.max(s_smax_preds, dim = 1)
-        t_pred_labels, idx = torch.max(t_smax_preds, dim = 1)
+        #Find the predicted labels from both the student and the teacher for that sample
+        s_preds, s_pred_labels = torch.max(s_smax_preds, dim = 1)
+        t_preds, t_pred_labels = torch.max(t_smax_preds, dim = 1)
         #Find the difference between the STUDENT predicted labels and the GROUND TRUTH predicted labels
-        print(true_preds.size)
+        print(true_preds.shape)
         print(true_preds)
-        print(s_pred_labels.size)
+        print(s_pred_labels.shape)
+        print(s_pred_labels)
         diff = torch.sub(s_pred_labels, true_preds)
         #Find the SUM of all the teacher labels - perform this column wise
-        t_label_sum = torch.cumsum(t_pred_labels, dim = 0)
-        #Divide each element in s_pred_labels by the total teacher sum
-        weight_tensor = torch.divide(t_pred_labels, t_label_sum)
+        t_label_sum = torch.cumsum(t_preds, dim = 0)
+        #Divide each element in t_pred_labels by the total teacher sum
+        weight_tensor = torch.divide(t_preds, t_label_sum)
         #Multiply the weight tensor by the gradients to get the final gradient update, normalize by batch size (first element in the tensor)
         batch_size = s_pred_labels.shape[0]
         grad_input = batch_size * torch.mul(weight_tensor, diff)
