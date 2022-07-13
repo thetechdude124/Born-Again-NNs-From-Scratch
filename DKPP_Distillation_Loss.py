@@ -25,7 +25,7 @@ class DKPP_DistillationLoss(Function):
         #First, draw tensors from the context object
         s_smax_preds, t_smax_preds = ctx.saved_tensors
         #Find the true predicted labels for both tensors (maximum of both probability distributions) - store returned index tensor in idx
-        s_pred_labels, idx= torch.max(s_smax_preds, dim = 1)
+        s_pred_labels, idx = torch.max(s_smax_preds, dim = 1)
         t_pred_labels, idx = torch.max(t_smax_preds, dim = 1)
         #Subtract both tensors and normalize by 1/b (where b is batch size) to obtain first term of gradient expression
         batch_size = s_pred_labels.shape[0]
@@ -41,6 +41,6 @@ class DKPP_DistillationLoss(Function):
         #No gradients needed for the teacher labels
         return grad_input, None
 
-#If script is run from terminal, run the testing script
+#If script is run from terminal, run the testing script (test functino found in CWTM_Distillation_Loss.py)
 if __name__ == "__main__":
     test(DKPP_DistillationLoss, n_args = 2)

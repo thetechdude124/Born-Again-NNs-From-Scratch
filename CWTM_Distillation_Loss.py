@@ -22,52 +22,45 @@ class CWTM_DistillationLoss(Function):
         #Implement Equation 10 from the BAN paper https://proceedings.mlr.press/v80/furlanello18a/furlanello18a.pdf
         #Obtain labels from the saved tensors
         s_smax_preds, t_smax_preds, true_preds = ctx.saved_tensors
-        #Find the predicted labels from both the student and the teacher for that sample
-        s_preds, s_pred_labels = torch.max(s_smax_preds, dim = 1)
-        t_preds, t_pred_labels = torch.max(t_smax_preds, dim = 1)
+        #Find the probabilities of the predicted teacher classes, as well as the class predicted
+        t_preds, t_pred_classes = torch.max(t_smax_preds, dim = 1)
+        #For the student, find the probabilities located at the index of the true labels (i.e. what probability the student had for the correct answer)
+        #Use the true classes to accomplish this - unsqueeze the true classes to (batch size, 1) such that .gather can be applied
+        true_preds.unsqueeze_(1)
+        s_true_label_preds = torch.gather(s_smax_preds, dim = 0, index = true_preds)
         #Find the difference between the STUDENT predicted labels and the GROUND TRUTH predicted labels
-        print(true_preds.shape)
-        print(true_preds)
-        print(s_pred_labels.shape)
-        print(s_pred_labels)
-        diff = torch.sub(s_pred_labels, true_preds)
-        #Find the SUM of all the teacher labels - perform this column wise
-        t_label_sum = torch.cumsum(t_preds, dim = 0)
+        #Subtract by 1, as the true label will always be one (before weighting via teacher)
+        diff = torch.sub(s_true_label_preds, 1.0)
+        #Convert to vector (remove extra dimension) to allow for element-wise multiplication
+        diff.squeeze_()
+        #Find the SUM of all the teacher probabilities within the minibatch
+        t_label_sum = torch.sum(t_preds, dim = 0)
         #Divide each element in t_pred_labels by the total teacher sum
         weight_tensor = torch.divide(t_preds, t_label_sum)
         #Multiply the weight tensor by the gradients to get the final gradient update, normalize by batch size (first element in the tensor)
-        batch_size = s_pred_labels.shape[0]
-        grad_input = batch_size * torch.mul(weight_tensor, diff)
+        batch_size = s_true_label_preds.shape[0]
+        grad_input = torch.mul((1 / batch_size),torch.mul(weight_tensor, diff))
+        #As we took the MAX predictions (we subtracted the probabilities of the true predictions), we now have a vector as a gradient.
+        #Simply expand the vector to the original input size - each prediction per row should have the same gradient (no dark knowledge)
+        #So, each class should have the same gradient - unsqueeze the gradient input to convert to matrix
+        grad_input.unsqueeze_(dim = 1)
+        grad_input = grad_input.repeat((1, s_smax_preds.shape[1]))
         #Return gradient to update student parameters - neither the teacher nor the true preds must have their gradients updated (return None)
         return grad_input, None, None
 
 #Sample Tensors Taken from Student Training to validate distillation loss function
 def test(loss_function, n_args):
-    #Initialize sample student, teacher, and true_y tensors
-    t1 = torch.tensor([[ 0.2712,  0.4951,  2.3495, -1.3418, -4.1593, -2.5714],
-                        [-2.0363, -3.5144,  0.8292, 0.7601, -2.6227, -0.4574],
-                        [-0.7060,  0.9497, -1.9310, -1.2268,  1.0167,  0.1409],
-                        [-0.6878,  2.1271,  2.0423, -0.8579,  2.5472,  2.2425],
-                        [-0.6267, -0.0535,  2.2955, 1.4334, -0.2030,  0.0673],
-                        [-1.0541, -0.4715, -2.4049, -0.2177,  2.7034, -0.0544]], requires_grad = True)
-    t2 = torch.tensor([[ 1.2977,  3.1175,  4.8884, -5.7194, -0.2108, -2.4929],
-                        [-0.5247, -2.2806, -2.0431, 2.7392, -0.0386,  6.6598],
-                        [ 3.5381, -0.0925,  2.9286, -0.5404,  0.4483, -0.5553],
-                        [-0.7808,  2.6653,  0.5740, -0.8034,  1.0488, -3.3808],
-                        [-0.3185,  1.4326, -1.1891, 9.1551, -0.6319, -7.0673],
-                        [-0.4056,  0.8678,  0.2392, -2.7831, -2.6583, -1.8217]], requires_grad = False)
-    t3 = torch.tensor([[ 1., 0., 0., 0., 0., 0.],
-                        [ 0., 1., 0., 0., 0., 0.],
-                        [ 0., 0., 1., 0., 0., 0.],
-                        [ 1., 0., 0., 0., 0., 0.],
-                        [ 0., 0., 0., 0., 1., 0.],
-                        [ 0., 1., 0., 0., 0., 0.]])
+    #Initialize sample student, teacher, and true_y tensors with the same sizes as what will be used in the BAN (64 * 20)
+    t1 = torch.rand(64, 20, requires_grad = True)
+    t2 = torch.rand(64, 20)
+    t3 = torch.randint(low = 0, high = 19, size = (64,))
     #Create loss object
     loss_func = loss_function.apply
     #Calculate loss - as this method is also used to test the DKPP loss, check the number of required args
     if n_args == 2: loss = loss_func(t1, t2) 
     else: loss = loss_func(t1, t2, t3)
     #Calculate gradients from loss
+    loss.backward()
     print('LOSS: ', loss)
 
 #If the script is run directly from the terminal, perform the test
