@@ -115,12 +115,68 @@ $$ \ell(x_1,t_1..x_b,t_b)=\frac{1}{b}\sum^{b}_{s=1}\ell(x_s,t_s) $$
 
 So, if we wanted to find the gradient of this loss over the batch, we would simply find the average gradient across all the PREDICTED samples, right (the predicted sample being the highest probability)? In other words, we would take $q_*-p_*$ for each sample in the minibatch and then average it. This yields:
 
-$$ \frac{1}{b}\sum^b_{s=1}\frac{∂L_{i,s}}{∂z_{i,s}}=\frac{1}{b}\sum^{b}_{s=1}(q_{*,s}-p_{*,s}) $$
+$$ \frac{1}{b}\sum^b_{s=1}\frac{∂L_{i,s}}{∂z_{i,s}}=\frac{1}{b}\sum^{b}_{s=1}(q_{\ast,s}-p_{\ast,s}) $$
 
 But, this is missing some key information - namely, **the Dark Knowledge hidden inside the remainder of the probability distribution.** We are computing the gradients over **the true predictions, but NOT the gradients for each probability inside each sample.** We can fix this by adding another term - a **Dark Knowledge Term** - that, **for each sample, iterates over *all logits* rather than just the predicted (max) ones and calculates *their difference from the teacher logits.***
 
-$$ \frac{1}{b}\sum^b_{s=1}\sum^n_{i=1}\frac{∂L_{i,s}}{∂z_{i,s}}=\frac{1}{b}\sum^{b}_{s=1}(q_{*,s}-p_{*,s})+\frac{1}{b}\sum^b_{s=1}\sum^{n-1}_{i=1}(q_{i,s}-p_{i,s}) $$
+$$ \frac{1}{b}\sum^b_{s=1}\sum^n_{i=1}\frac{∂L_{i,s}}{∂z_{i,s}}=\frac{1}{b}\sum^{b}_{s=1}(q_{\ast,s}-p_{\ast,s})+\frac{1}{b}\sum^b_{s=1}\sum^{n-1}_{i=1}(q_{i,s}-p_{i,s}) $$
 
 Remember - usually, we would **just consider the first term** (the difference between the predictions for the correct classes). But, if the Dark Knowledge Hypothesis is correct, then the remainder of the probability distribution matters as well. So, we must **also consider these differences for each individual logit as well.**
 
-Let's consider something - we know that the **ground truth prediction for the correct class in the dataset will always be 1.** A given dataset will be one-hot-encoded, or simply have the index of the correct class, but in either case if we were to compute the probabilities they would be (0, 0, 0, 1), where 1 is the probability of the correct class. The probability for the correct class will always be 1 - if $y$ represents the ground truth and $*$ represents the probability at the true class, then $y_{*,s}$ will always be one, and will be zero whenever it is not on the true class. **what happens if we combine this term $y_{*,s}$ with $p_{*,s}$**? 
+Let's consider something - we know that the **ground truth prediction for the correct class in the dataset will always be 1.** A given dataset will be one-hot-encoded, or simply have the index of the correct class, but in either case if we were to compute the probabilities they would be (0, 0, 0, 1), where 1 is the probability of the correct class. The probability for the correct class will always be 1 - if $y$ represents the ground truth and $*$ represents the probability at the true class, then $y_{\ast,s}$ will always be one, and will be zero whenever it is not on the true class. **What happens if we combine this term $y_{\ast,s}$ with $p_{\ast,s}$**? It might look something like this:
+
+$$ \frac{1}{b}\sum^b_{s=1}(q_{\ast,s}-p_{\ast,s}y_{\ast,s}) $$
+
+We know that $p_{\ast,s}$ (the teacher's predictions for the highest label) will **almost never be 1** - it may reach *a value approximating that* (like 0.9998), but the probability of it achieving one is extremely low. **Importantly, the closer this value is to one** (the condition where if we were to take the limit of this function it would equal 1), **the closer this function becomes to the cross entropy derivative where we simply subtract $q_i$ by 1! 
+
+What happens if $p_{\ast,s}$ is *not* a value close to one? Well, this indicates that **the teacher is not confident in its prediction**, and as a result, the **size of the gradient update will be closer to zero** (recall that *the student predictions will be less than one*) so this term becomes negative; if we subtract the student predictions by a smaller value, then **the gradient ends up closer to zero on average.** 
+
+What this really means is that *the teacher model is performing a sort of **"confidence weighting" on the samples presented by the dataset - if the teacher is not confident in its predictions, the gradient updates will be closer to zero.*** This could be highly advantageous - if the teacher is not confident w.r.t a certain sample, it can prevent the student from prematurely entering a local minima or making disastourous updates based one or two awry samples. This, therefore, further aides in ensuring the validity and effectiveness of gradient updates and by extension can help to improve convergence. Let's step away from the example above and **re-write the above expression with $p_{\ast,s}$ as a true weight *for the entire expression* instead of just for $y_{\ast,s}$:**
+
+*Let $w$ represent an arbitrary weight - we multiply the weight calculated at sample $s$ divided by the weights across the entire minibatch (obtaining, as a percentage, the **magnitude (confidence) of the weight as compared to other weights in the batch**). In essence, we obtain how "confident" the teacher model is in a certain sample in comparison to its other predictions within the batch.*
+
+$$ \frac{1}{b}\sum^{b}_{s=1}\frac{w_s}{\sum^{b}_{u=1}w_u}(q_{\ast,s}-y_{\ast,s})=\frac{1}{b}\sum^{b}_{s=1}\frac{p_{\ast,s}}{\sum^{b}_{u=1}p_{\ast,u}}(q_{\ast,s}-y_{\ast,s}) $$
+
+So, this begs the question - **does the success of Knowledge Distillation rely on the Dark Knowledge terms, or the confidence weighting shown here?**
+
+To solve this, the paper devises *two different distillation losses* to test just this - **CWTM (Confidence Weighting by Teacher Max) and DKPP (Dark Knowledge with Permuted Predictions0).** The gradient of CWTM is almost exactly what we saw above; except, to preserve generality, we take the **highest predictions obtained by the teacher out of all predictions $.$ at a certain sample $s$:
+
+$$ \frac{1}{b}\sum^{b}_{s=1}\frac{\max p_{.,s}}{\sum^{b}_{u=1}\max p_{\ast,u}}(q_{\ast,s}-y_{\ast,s}) $$
+
+What about DKPP? Same thing as the usual Derivative with the Dark Knowledge Term - **except this time, we will randomly permute the dark knowledge terms for different samples in the batch as to destroy the covariance matrix between the logits and maximum predictions for each sample via permutation function $\phi$.** In essence, if it truly is the Dark Knowledge hidden within logits that are important, *then we should see positive impact irrespective of what sample those logits belong too; since the relationships being taught are identical.* Putting it all together, this is what DKPP looks like:
+
+$$ \frac{1}{b}\sum^b_{s=1}\sum^n_{i=1}\frac{∂L_{i,s}}{∂z_{i,s}}=\frac{1}{b}\sum^{b}_{s=1}(q_{\ast,s}-\max p_{.,s})+\frac{1}{b}\sum^b_{s=1}\sum^{n-1}_{i=1}(q_{i,s}-\phi(p_{j,s})) $$
+
+That, is going to be the focus of this experiment - **determining whether Dark Knowledge is truly important with regards to Knowledge Distillation as compared to teacher confidence weighting**, and how this plays a role in the performance of BANs (which are really a special case of the aforementioned KD).
+
+### **🔍 Methdology and About the Experiment/Repo.**
+
+Fundamentally, this experiment is about testing performance of an ensemble of four student BANs on the ImageWang between those trained via the CWTM and DKPP distillation losses to determine their true importance. **One of the key critiscims of the original paper is that the experimentation process has been done primarily on CIFAR-10 and MNIST** (which, given the ability of even simple networks to achieve near state-of-the-art accuracies on them, is simply not a good way to validate findings), **so this implementation will test the findings on the more complex ImageWang dataset (a subset of the larger ImageNet dataset with both trivial and difficult classes).** 
+
+*Some samples from the ImageWang dataset:*
+
+<p align = "center"><img src = "./images/IMAGEWANG_SAMPLE_IMAGES.png"></img></p>
+
+All loss functions have been implemented **from scratch** with PyTorch with custom backward methods - the forward methods of both these losses utilize `BCEWithLogitsLoss` (binary cross entropy) to calculate the ldstillation loss between the distribution of student and teacher losses, as you'll find in the repo. Check the individual files for more details on implementation!
+
+**The teacher model will be the complex DenseNet-121, whereas the student models will be the Resnet18 - the latter is known to be more simple due to skip connections going only to the incoming layer, and will help determine whether a strong teacher can teach a weaker student of roughly the same number of parameters and have the BAN student (resnet 18) exceed it in performance.**
+
+Here's a quick diagram illustrating the architectures used (made in powerpoint, images from https://towardsdatascience.com/creating-densenet-121-with-tensorflow-edbc08a956d8 and https://www.researchgate.net/figure/Architecture-of-the-ResNet-18-model-used-in-this-study_fig3_354432343):
+
+<p align = "center"><img src = "./images/DENSENET121_RESNET18_DIAGRAM.png"></img></p>
+
+(Note: check out this article https://medium.com/@smallfishbigsea/densenet-2b0889854a92 for more information on DenseNets and ResNets!)
+
+🖱️**There are 3 key parts to this repository:**
+
+- `CWTM_Distillation_Loss.py` - this is where the CWTM loss lives, as well as a small testing script *that generates tensors of the same size as those passed by the srtudent ReNets and passes them to the specified function.* 
+- `DKPP_Distillation_Loss.py` - implementation of the DKPP Distillation Loss.
+- `BANs_Experimentation.ipynb` - the site of the data processing, training, and experimentation process.
+
+Feel free to clone this repository and try out the notebook yourself! Due to a lack of compute, I conducted the Densenet121 to BAN Resnet18 experiment; it'd be interesting to see how other models perform in this regard (and if the BAN ResNet18 can even serve as a teacher model; as was done in the paper with a WideResNet28-1)!
+
+*Special thanks to Tommaso Furlanello, Zachary C. Lipton, Micheal Tschannen, Laurent Itti, and Anima Anandkumar for the original BAN paper! This was AWESOME to replicate and drastically improved my understanding of Knowledge Distillation + how important a given network's learned representation is and how said represention can be relearned through "resynthesizing" information.*
+
+### 🎯 **The Results.**
+
+### 🔑 **Key Learnings and Thoughts.**
