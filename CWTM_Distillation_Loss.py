@@ -21,9 +21,14 @@ class CWTM_DistillationLoss(Function):
         #Use Cross Entropy Loss - PyTorch does NOT support cross entropy between two probability distribution (and instead requires labels), so we must re-implement it
         #We could alternatively use Kulback Leibler loss 
         #Implement (- \sum(q(x) * log(p(x)))) where q(x) is the predicted (student) distribution and p(x) is the "true" (teacher) distribution
-        #Take the sum for each row, and then find the mean of all the column sums
-        loss = - torch.sum(torch.mul(t_soft_preds, torch.log(s_soft_preds))).mean()
-        return loss #torch.sum(loss_per_sample)/s_soft_preds.shape[0]
+        #Take the sum for each row, and then find the mean of all the column sums - add small epsillon to prevent exploding gradients (divergence)
+        loss = - torch.sum(torch.mul(t_soft_preds, torch.log(s_soft_preds))).mean() + 10e-10
+        # print('STUDENT PREDICTIONS: \n', s_preds)
+        # print('SOFTMAX STUDENT PREDICTIONS: \n', s_soft_preds)
+        # print('TEACHER PREDICTIONS: \n', t_preds)
+        # print('SOFTMAX TEACHER PREDICTIONS: \n', t_soft_preds)
+        # print('TRUE PREDICTIONS: \n', true_preds)
+        return loss
 
     #Define backward method (where the gradient of the loss is computed)
     @staticmethod
@@ -48,14 +53,13 @@ class CWTM_DistillationLoss(Function):
         weight_tensor = torch.divide(t_preds, t_label_sum)
         #Multiply the weight tensor by the gradients to get the final gradient update, normalize by batch size (first element in the tensor)
         batch_size = s_true_label_preds.shape[0]
-        grad_input = torch.mul((1 / batch_size),torch.mul(weight_tensor, diff))
+        grad_input = torch.mul((1 / batch_size), torch.mul(weight_tensor, diff))
         #As we took the MAX predictions (we subtracted the probabilities of the true predictions), we now have a vector as a gradient.
         #Simply expand the vector to the original input size - each prediction per row should have the same gradient (no dark knowledge)
         #So, each class should have the same gradient - unsqueeze the gradient input to convert to matrix
         grad_input.unsqueeze_(dim = 1)
         grad_input = grad_input.repeat((1, s_smax_preds.shape[1]))
         #Return gradient to update student parameters - neither the teacher nor the true preds must have their gradients updated (return None)
-        print(grad_input)
         return grad_input, None, None
 
 #Sample Tensors Taken from Student Training to validate distillation loss function
@@ -72,6 +76,7 @@ def test(loss_function, n_args):
             get_y = parent_label,
             batch_tfms = aug_transforms(mult = 2.0, do_flip = False))
     training_dataloader = mnist_datablock.dataloaders(mnist_dataset_url/"training", batch_size = 64)
+    training_dataloader_2 = mnist_datablock.dataloaders(mnist_dataset_url/"training", batch_size = 64)
     #Create test model (simple 4 layer network)
     test_model_architecture = nn.Sequential(nn.Flatten(),
                                             nn.Linear(28 * 28 * 3, 500),
@@ -89,7 +94,7 @@ def test(loss_function, n_args):
     test_learner.opt = Adam(test_learner.parameters(), lr = 0.0001)
     #Import teacher model (from CustomMaxout.py where a ReLU model was trained on MNIST as a part of a comparison test)
     #The teacher model has the same architecture as the student
-    teacher_learner = Learner(training_dataloader, test_model_architecture, metrics = ['accuracy', 'error_rate'])
+    teacher_learner = Learner(training_dataloader_2, test_model_architecture, metrics = ['accuracy', 'error_rate'])
     teacher_learner.load('TEST_TEACHER')
     #Training loop for test learner
     for epoch in range(5):
@@ -97,11 +102,14 @@ def test(loss_function, n_args):
         for batch_idx, batch_data in enumerate(test_learner.dls.train, 0):
             #Get inputs and labels
             inputs, labels = batch_data
+            print(inputs)
+            inputs_2 = torch.tensor(inputs)
             #Set grad to zero
             test_learner.zero_grad()
             #Generate predictions
             student_preds = test_learner.model(inputs)
-            teacher_preds = teacher_learner.model(inputs)
+            print(inputs)
+            teacher_preds = teacher_learner.model(inputs_2)
             #Find loss
             loss_func = loss_function.apply
             if n_args == 2:
@@ -125,6 +133,8 @@ def passTensors(loss_function, n_args):
     t1 = torch.rand(64, 20, requires_grad = True)
     t2 = torch.rand(64, 20)
     t3 = torch.randint(low = 0, high = 19, size = (64,))
+    print("TENSOR 1: \n", t1)
+    print("TENSOR 2: \n", t2)
     #Create loss object
     loss_func = loss_function.apply
     #Calculate loss - as this method is also used to test the DKPP loss, check the number of required args
