@@ -1,7 +1,7 @@
 import torch
 from torch.autograd import Function
-#Import the testing function from CWTM_Distillation.py to verify that the function works
-from CWTM_Distillation_Loss import test
+#Import the testing function from Test_Distillations to verify that the function works
+from Test_Distillations import testDistillation
 
 #DKPP (Dark Knowledge with Permuted Predictions) Distillation Loss - purpose is to test if the Dark Knowledge terms in Distillation Loss
 #Are truly critical via permuting the dark knowledge logits so as to destroy the covariance matrix between max and 
@@ -47,4 +47,4 @@ class DKPP_DistillationLoss(Function):
 
 #If script is run from terminal, run the testing script (test functino found in CWTM_Distillation_Loss.py)
 if __name__ == "__main__":
-    test(DKPP_DistillationLoss, n_args = 2)
+    testDistillation(DKPP_DistillationLoss, n_args = 2)

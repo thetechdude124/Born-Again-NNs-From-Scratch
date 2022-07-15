@@ -10,7 +10,7 @@ Let's get into it!
 
 ### 🤔 **The Math Behind BANs - Confidence Weighting, Dark Knowledge, and More.**
 
-For a typical BAN system, the training procedure looks something like this (where $x$ is the input data, $T$ represents the initial teacher model, $S_k$ represents the $i-th$ student learner, $f(x)$ represents the classifier learned by the model, and $y$ represents the generated predictions):
+For a typical BAN system, the training procedure looks something like this (where $x$ is the input data, $T$ represents the initial teacher model, $S_k$ represents the $k-th$ student learner, $f(x)$ represents the classifier learned by the model, and $y$ represents the generated predictions):
 
 <p align = "center"><img src = "./images/BAN_TRAINING_PROCEDURE.png"></img></p>
 
@@ -141,7 +141,9 @@ So, this begs the question - **does the success of Knowledge Distillation rely o
 
 To solve this, the paper devises *two different distillation losses* to test just this - **CWTM (Confidence Weighting by Teacher Max) and DKPP (Dark Knowledge with Permuted Predictions0).** The gradient of CWTM is almost exactly what we saw above; except, to preserve generality, we take the **highest predictions obtained by the teacher out of all predictions $.$ at a certain sample $s$:
 
-$$ \frac{1}{b}\sum^{b}_{s=1}\frac{\max p_{.,s}}{\sum^{b}_{u=1}\max p_{\ast,u}}(q_{\ast,s}-y_{\ast,s}) $$
+$$ \frac{1}{b}\sum^{b}_{s=1}\frac{\max p_{.,s}}{\sum^{b}_{u=1}\max p_{.,u}}(q_{\ast,s}-y_{\ast,s}) $$
+
+**We're weighting by the teacher's CONDFIDENCE - the highest probability as opposed to the probability of the correct label.** We simply want to see how certain the teacher is regarding its prediction for a given sample, irrespective of what the right answer is. On the other hand, we *do* care about the student's prediction for the correct value.
 
 What about DKPP? Same thing as the usual Derivative with the Dark Knowledge Term - **except this time, we will randomly permute the dark knowledge terms for different samples in the batch as to destroy the covariance matrix between the logits and maximum predictions for each sample via permutation function $\phi$.** In essence, if it truly is the Dark Knowledge hidden within logits that are important, *then we should see positive impact irrespective of what sample those logits belong too; since the relationships being taught are identical.* Putting it all together, this is what DKPP looks like:
 
@@ -180,3 +182,5 @@ Feel free to clone this repository and try out the notebook yourself! Due to a l
 ### 🎯 **The Results.**
 
 ### 🔑 **Key Learnings and Thoughts.**
+
+Everything considered, this is probably the most advanced project I've done yet - not necessarily in terms of the end product/process, but in terms of understanding gradient flow and calculations from first-principles, thinking analytically to "distill" higher-level functions into more concrete ones to better understand why it works (i.e. the paper working through basic Dark Knowledge-based gradients and introdudcing new elements to find that the term was anagolous to teacher confidence weighting), 
