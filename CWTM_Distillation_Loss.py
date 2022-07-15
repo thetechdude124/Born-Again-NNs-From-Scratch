@@ -1,5 +1,7 @@
 import torch
+import torch.nn as nn
 from torch.autograd import Function
+from fastai.vision.all import *
 
 #CWTM (Confidence Weighted by Teacher Max) Distillation Loss - subclass of torch.autograd.Function, all methods are static
 class CWTM_DistillationLoss(Function):
@@ -10,11 +12,18 @@ class CWTM_DistillationLoss(Function):
         #Save both prediction tensors into context object for gradient computations
         #We want to save the NORMALIZED (softmax activated) versions of each tensor as opposed to the raw probabilities - normalize the values first, and then save
         softmax = torch.nn.Softmax(dim = 1) #Perform across each row (each row sums to 1)
+        #The true predictions are already encoded and do not requre softmax
+        s_soft_preds = softmax(s_preds)
+        t_soft_preds = softmax(t_preds)
         #True predictions are already encoded; they do not require softmax
-        ctx.save_for_backward(softmax(s_preds), softmax(t_preds), true_preds)
-        #Use Cross Entropy Loss - the neural networks used in this project are not softmax activated (raw logits), and the softmax conversion done above does not affect the actual tensors
-        loss = torch.nn.BCEWithLogitsLoss()
-        return loss(s_preds, t_preds)
+        #Perform the softmax activation in the process
+        ctx.save_for_backward(s_soft_preds, t_soft_preds, true_preds)
+        #Use Cross Entropy Loss - PyTorch does NOT support cross entropy between two probability distribution (and instead requires labels), so we must re-implement it
+        #We could alternatively use Kulback Leibler loss 
+        #Implement (- \sum(q(x) * log(p(x)))) where q(x) is the predicted (student) distribution and p(x) is the "true" (teacher) distribution
+        #Take the sum for each row, and then find the mean of all the column sums
+        loss = - torch.sum(torch.mul(t_soft_preds, torch.log(s_soft_preds))).mean()
+        return loss #torch.sum(loss_per_sample)/s_soft_preds.shape[0]
 
     #Define backward method (where the gradient of the loss is computed)
     @staticmethod
@@ -46,10 +55,72 @@ class CWTM_DistillationLoss(Function):
         grad_input.unsqueeze_(dim = 1)
         grad_input = grad_input.repeat((1, s_smax_preds.shape[1]))
         #Return gradient to update student parameters - neither the teacher nor the true preds must have their gradients updated (return None)
+        print(grad_input)
         return grad_input, None, None
 
 #Sample Tensors Taken from Student Training to validate distillation loss function
 def test(loss_function, n_args):
+    #Pass in sample tensors to determine whether the forward and backward methods are working syntactically
+    passTensors(loss_function, n_args)
+    #Generate small neural network and backpropogate to determine whether backward is correctly calculating gradients (using FastAI and MNIST)
+    mnist_dataset_url = untar_data(URLs.MNIST)
+    #Create datablock and dataloader
+    mnist_datablock = DataBlock(
+            blocks = (ImageBlock, CategoryBlock),
+            get_items = get_image_files,
+            splitter = RandomSplitter(valid_pct = 0.2, seed = 32),
+            get_y = parent_label,
+            batch_tfms = aug_transforms(mult = 2.0, do_flip = False))
+    training_dataloader = mnist_datablock.dataloaders(mnist_dataset_url/"training", batch_size = 64)
+    #Create test model (simple 4 layer network)
+    test_model_architecture = nn.Sequential(nn.Flatten(),
+                                            nn.Linear(28 * 28 * 3, 500),
+                                            nn.ReLU(),
+                                            nn.Linear(500, 300),
+                                            nn.ReLU(),
+                                            nn.Linear(300, 200),
+                                            nn.ReLU(),
+                                            nn.Linear(200, 10))
+    #Create learner object
+    test_learner = Learner(training_dataloader, test_model_architecture, metrics = ['accuracy', 'error_rate'])
+    #Find optimal learning rate
+    # optimal_LR = test_learner.lr_find()[0]
+    #print(optimal_LR)
+    test_learner.opt = Adam(test_learner.parameters(), lr = 0.0001)
+    #Import teacher model (from CustomMaxout.py where a ReLU model was trained on MNIST as a part of a comparison test)
+    #The teacher model has the same architecture as the student
+    teacher_learner = Learner(training_dataloader, test_model_architecture, metrics = ['accuracy', 'error_rate'])
+    teacher_learner.load('TEST_TEACHER')
+    #Training loop for test learner
+    for epoch in range(5):
+        batch_losses = []
+        for batch_idx, batch_data in enumerate(test_learner.dls.train, 0):
+            #Get inputs and labels
+            inputs, labels = batch_data
+            #Set grad to zero
+            test_learner.zero_grad()
+            #Generate predictions
+            student_preds = test_learner.model(inputs)
+            teacher_preds = teacher_learner.model(inputs)
+            #Find loss
+            loss_func = loss_function.apply
+            if n_args == 2:
+                loss = loss_func(student_preds, teacher_preds)
+            elif n_args == 3:
+                loss = loss_func(student_preds, teacher_preds, labels)
+            #Compute gradients
+            loss.backward()
+            #Take step
+            test_learner.opt.step()
+            #Add to batch losses
+            batch_losses.append(loss)
+            #If on the final epoch:
+            print('MINIBATCH [{}] LOSS: {}'.format(batch_idx, loss))
+            if batch_idx == 63:
+                avg_batch_loss = sum(batch_losses) / len(batch_losses)
+                print("TRAINING EPOCH [{}] LOSS: {}".format(epoch, avg_batch_loss))                                         
+
+def passTensors(loss_function, n_args):
     #Initialize sample student, teacher, and true_y tensors with the same sizes as what will be used in the BAN (64 * 20)
     t1 = torch.rand(64, 20, requires_grad = True)
     t2 = torch.rand(64, 20)
@@ -58,10 +129,25 @@ def test(loss_function, n_args):
     loss_func = loss_function.apply
     #Calculate loss - as this method is also used to test the DKPP loss, check the number of required args
     if n_args == 2: loss = loss_func(t1, t2) 
-    else: loss = loss_func(t1, t2, t3)
+    else: loss = loss_func(t1, t1, t3)
     #Calculate gradients from loss
+    loss.retain_grad()
     loss.backward()
     print('LOSS: ', loss)
+    print('GRADIENTS: ', loss.grad)
+
+#Test of the same sized tensors to determine if the loss becomes zero
+def sampleTest(loss_function, n_args):
+    t1 = torch.tensor([[2., 3., 4., 1., 4., 1.]], requires_grad = True)
+    t2 = torch.tensor([[2., 3., 4., 1., 4., 1.]], requires_grad = True)
+    t3 = torch.tensor([[2, 3, 4, 1, 4, 1]])
+    loss_func = loss_function.apply
+    if n_args == 2: loss = loss_func(t1, t2)
+    else: loss = loss_func(t1, t2, t3)
+    print('LOSS: ', loss)
+    loss.retain_grad()
+    loss.backward()
+    print('GRADIENTS: ', loss.grad)
 
 #If the script is run directly from the terminal, perform the test
 if __name__ == "__main__":
