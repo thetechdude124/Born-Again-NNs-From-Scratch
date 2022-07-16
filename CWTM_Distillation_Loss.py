@@ -24,12 +24,13 @@ class CWTM_DistillationLoss(Function):
         loss_function = nn.CrossEntropyLoss(reduction = "mean")
         #Compute and return loss
         loss = loss_function(s_preds, t_preds)
+        loss = - torch.sum(torch.mul(t_soft_preds, torch.log(s_soft_preds))).mean() + 10e-10
         #Print tensor predictions for debugging
         #print('STUDENT PREDICTIONS: \n', s_preds)
-        print('SOFTMAX STUDENT PREDICTIONS: \n', s_soft_preds)
+        #print('SOFTMAX STUDENT PREDICTIONS: \n', s_soft_preds)
         #print('TEACHER PREDICTIONS: \n', t_preds)
-        print('SOFTMAX TEACHER PREDICTIONS: \n', t_soft_preds)
-        print('TRUE PREDICTIONS: \n', true_preds)
+        #print('SOFTMAX TEACHER PREDICTIONS: \n', t_soft_preds)
+        #print('TRUE PREDICTIONS: \n', true_preds)
         return loss
 
     #Define backward method (where the gradient of the loss is computed)
@@ -51,12 +52,10 @@ class CWTM_DistillationLoss(Function):
         #Convert to vector (remove extra dimension) to allow for element-wise multiplication
         weight_tensor.unsqueeze_(dim = 1)
         #Multiply the weight tensor by the gradients to get the final gradient update, normalize by batch size (first element in the tensor)
+        #Take the "element-wise" product of the weight tensor and difference (vector and matrix) to preserve matrix dims for gradient
         batch_size = s_smax_preds.shape[0]
-        print(weight_tensor.shape)
-        print(diff.shape)
-        grad_input = (1 / batch_size) * torch.matmul(diff, weight_tensor)
-        print(grad_input.shape)
-        print('GRADIENTS: \n', grad_input)
+        grad_input = (1 / batch_size) * (weight_tensor * diff)
+        #print('GRADIENTS: \n', grad_input)
         #Return gradient to update student parameters - neither the teacher nor the true preds must have their gradients updated (return None)
         return grad_input, None, None
 

@@ -40,7 +40,7 @@ def testDistillation(loss_function, n_args):
     #Find optimal learning rate
     # optimal_LR = test_learner.lr_find()[0]
     #print(optimal_LR)
-    test_learner.opt = Adam(test_learner.parameters(), lr = 10e-5)
+    test_learner.opt = Adam(test_learner.parameters(), lr = 0.00000001)
     #Import teacher model (from CustomMaxout.py where a ReLU model was trained on MNIST as a part of a comparison test)
     #The teacher model has the same architecture as the student
     teacher_learner = Learner(training_dataloader, teacher_model_architecture, metrics = ['accuracy', 'error_rate'])

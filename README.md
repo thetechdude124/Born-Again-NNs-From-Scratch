@@ -171,9 +171,10 @@ Here's a quick diagram illustrating the architectures used (made in powerpoint, 
 
 🖱️**There are 3 key parts to this repository:**
 
-- `CWTM_Distillation_Loss.py` - this is where the CWTM loss lives, as well as a small testing script *that generates tensors of the same size as those passed by the srtudent ReNets and passes them to the specified function.* 
-- `DKPP_Distillation_Loss.py` - implementation of the DKPP Distillation Loss.
+- `CWTM_Distillation_Loss.py` - implementation of the CWTM Distillation loss/gradient.
+- `DKPP_Distillation_Loss.py` - implementation of the DKPP Distillation loss/gradient computation.
 - `BANs_Experimentation.ipynb` - the site of the data processing, training, and experimentation process.
+- `Test_Distillations.py` - a testing script that a) passes in a couple sample tensors into the aforementioned distillation implementations and then trains them on MNIST to judge whether the gradients are flowing smoothly.
 
 Feel free to clone this repository and try out the notebook yourself! Due to a lack of compute, I conducted the Densenet121 to BAN Resnet18 experiment; it'd be interesting to see how other models perform in this regard (and if the BAN ResNet18 can even serve as a teacher model; as was done in the paper with a WideResNet28-1)!
 
