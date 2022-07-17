@@ -1,7 +1,9 @@
 #Import libraries
 import torch
 from torch import nn
+import torch.nn.functional as F
 from fastai.vision.all import *
+from uniplot import plot
  
 #Sample Tensors Taken from Student Training to validate distillation loss function
 def testDistillation(loss_function, n_args):
@@ -16,7 +18,7 @@ def testDistillation(loss_function, n_args):
             splitter = RandomSplitter(valid_pct = 0.2, seed = 32),
             get_y = parent_label,
             batch_tfms = aug_transforms(mult = 2.0, do_flip = False))
-    training_dataloader = mnist_datablock.dataloaders(mnist_dataset_url/"training", batch_size = 10, shuffle = True)
+    training_dataloader = mnist_datablock.dataloaders(mnist_dataset_url/"training", batch_size = 64, shuffle = True)
     #Create test model architecture
     test_model_architecture = nn.Sequential(nn.Flatten(),
                                             nn.Linear(28 * 28 * 3, 500),
@@ -40,7 +42,7 @@ def testDistillation(loss_function, n_args):
     #Find optimal learning rate
     # optimal_LR = test_learner.lr_find()[0]
     #print(optimal_LR)
-    test_learner.opt = Adam(test_learner.parameters(), lr = 0.00000001)
+    test_learner.opt = Adam(test_learner.parameters(), lr = 0.001)
     #Import teacher model (from CustomMaxout.py where a ReLU model was trained on MNIST as a part of a comparison test)
     #The teacher model has the same architecture as the student
     teacher_learner = Learner(training_dataloader, teacher_model_architecture, metrics = ['accuracy', 'error_rate'])
@@ -48,7 +50,10 @@ def testDistillation(loss_function, n_args):
 
     #Training loop for test learner 
     for epoch in range(1):
-        batch_losses = []
+        #Distillation loss
+        ds_losses = []
+        #Accuracy
+        accuracies = []
         for batch_idx, batch_data in enumerate(test_learner.dls.train, 0):
             #Get inputs and labels
             inputs, labels = batch_data
@@ -56,9 +61,7 @@ def testDistillation(loss_function, n_args):
             test_learner.zero_grad()
             #Generate predictions
             student_preds = test_learner.model(inputs)
-            # print('STUDENT TRAINING PREDS: \n', student_preds)
             teacher_preds = teacher_learner.model(inputs)
-            # print('TEACHER TRAINING PREDS \n', teacher_preds)
             #Find loss
             loss_func = loss_function.apply
             if n_args == 2:
@@ -70,12 +73,22 @@ def testDistillation(loss_function, n_args):
             #Take step
             test_learner.opt.step()
             #Add to batch losses
-            batch_losses.append(loss)
-            #If on the final epoch:
-            print('MINIBATCH [{}] LOSS: {}'.format(batch_idx, loss))
-            if batch_idx == 63:
-                avg_batch_loss = sum(batch_losses) / len(batch_losses)
-                print("TRAINING EPOCH [{}] LOSS: {}".format(epoch, avg_batch_loss))                                         
+            ds_losses.append(loss.item())
+            #Find maximum predictions (the actual classes predicted by the student)
+            true_preds, true_pred_labels = torch.max(student_preds, dim = 1)
+            #Compute accuracy
+            acc = 100 * torch.eq(torch.tensor(true_pred_labels), torch.tensor(labels)).sum().item() / 64
+            #Append for graphing
+            accuracies.append(acc)
+            #Print metrics for minibatch
+            print('MINIBATCH [{}]: DIST LOSS {} ACCURACY {}%'.format(batch_idx, loss, round(acc, 2)))
+            if batch_idx == 749:
+                plot(ds_losses, title = "LOSSES", color = True, lines = True, legend_labels = ["DIST LOSSES"])
+                plot(accuracies, title = "ACCURACY", color = True, lines = True, legend_labels = ["ACCURACY"])
+                avg_batch_loss = sum(ds_losses) / len(ds_losses)
+                avg_acc = sum(accuracies)/len(accuracies)
+                print("TRAINING EPOCH [{}] LOSS: {} ACCURACY: {}".format(epoch, avg_batch_loss, avg_acc))    
+                break                                     
 
 def passTensors(loss_function, n_args):
     #Initialize sample student, teacher, and true_y tensors with the same sizes as what will be used in the BAN (64 * 20)

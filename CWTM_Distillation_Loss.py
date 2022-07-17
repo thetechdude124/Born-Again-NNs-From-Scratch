@@ -21,10 +21,13 @@ class CWTM_DistillationLoss(Function):
         #Convert the true predictions into a PyTorch tensor 
         true_preds = torch.tensor(true_preds)
         #Use Cross Entropy Loss with mean reduction to calculate differences between probability distributions rather than a distribution and labels
-        loss_function = nn.CrossEntropyLoss(reduction = "mean")
+        #loss_function = nn.CrossEntropyLoss(reduction = "mean")
         #Compute and return loss
-        loss = loss_function(s_preds, t_preds)
+        #loss = loss_function(s_preds, t_preds)
         loss = - torch.sum(torch.mul(t_soft_preds, torch.log(s_soft_preds))).mean() + 10e-10
+        true_labels_loss_func = nn.CrossEntropyLoss()
+        true_labels_loss = true_labels_loss_func(s_preds, true_preds)
+        print('TRUE LABEL CROSSENTROPY LOSS: ', true_labels_loss.item())
         #Print tensor predictions for debugging
         #print('STUDENT PREDICTIONS: \n', s_preds)
         #print('SOFTMAX STUDENT PREDICTIONS: \n', s_soft_preds)
