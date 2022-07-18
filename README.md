@@ -36,7 +36,7 @@ Let's say that a certain model is trying to classify a dog, train, car, and cat.
 
 *Quick refresher - the SoftMax activation takes a set of input values, and changes them into probabilities between 0 and 1. For a given vector* $z_i$ *,* $\sigma$ *(SoftMax)* $z_i$ *is given by:*
 
-$$\sigma(z_i) = \frac{e^{z_{i}}}{\sum_{j=1}^{K} e^{z_{j}}} \ \ \ for\ i=1,2,\dots,K$$
+$$ \sigma(z_i) = \frac{e^{z_{i}}}{ \sum^{K}_{j=1} e^{z_{j}}} \ \ \ for\ i=1,2,\dots,K $$
 
 *In other words - for each logit, it is simply* $e^{prob}$ *divided by the SUM of* $e$ *raised to all of the other probabilities. This function will be important later!*
 
