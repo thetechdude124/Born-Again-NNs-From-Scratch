@@ -148,9 +148,9 @@ $$\frac{1}{b}\sum^b_{s=1}\frac{w_s}{Σ_{u=1}^b w_u}(q_{\ast,s}-y_{\ast,s})=\frac
 
 So, this begs the question - **does the success of Knowledge Distillation rely on the Dark Knowledge terms, or the confidence weighting shown here?**
 
-To solve this, the paper devises *two different distillation losses* to test just this - **CWTM (Confidence Weighting by Teacher Max) and DKPP (Dark Knowledge with Permuted Predictions0).** The gradient of CWTM is almost exactly what we saw above; except, to preserve generality, we take the **highest predictions obtained by the teacher out of all predictions $.$ at a certain sample $s$:
+To solve this, the paper devises *two different distillation losses* to test just this - **CWTM (Confidence Weighting by Teacher Max) and DKPP (Dark Knowledge with Permuted Predictions0).** The gradient of CWTM is almost exactly what we saw above; except, to preserve generality, we take the **highest predictions obtained by the teacher out of all predictions $.$ at a certain sample $s$:**
 
-$$ \frac{1}{b}\sum^{b}_{s=1}\frac{\max p_{.,s}}{\sum^{b}_{u=1}\max p_{.,u}}(q_{\ast,s}-y_{\ast,s}) $$
+$$\frac{1}{b}\sum^b_{s=1}\frac{\max p_{.,s}}{Σ_{u=1}^b \max p_{.,u}}(q_{\ast,s}-y_{\ast,s}) $$
 
 **We're weighting by the teacher's CONDFIDENCE - the highest probability as opposed to the probability of the correct label.** We simply want to see how certain the teacher is regarding its prediction for a given sample, irrespective of what the right answer is. On the other hand, we *do* care about the student's prediction for the correct value.
 
