@@ -19,21 +19,14 @@ class CWTM_DistillationLoss(Function):
         #Save both prediction tensors + true label tensor into context object for gradient computations
         ctx.save_for_backward(s_soft_preds, t_soft_preds, true_preds)
         #Convert the true predictions into a PyTorch tensor 
-        true_preds = torch.tensor(true_preds)
-        #Use Cross Entropy Loss with mean reduction to calculate differences between probability distributions rather than a distribution and labels
-        #loss_function = nn.CrossEntropyLoss(reduction = "mean")
-        #Compute and return loss
-        #loss = loss_function(s_preds, t_preds)
-        loss = - torch.sum(torch.mul(t_soft_preds, torch.log(s_soft_preds))).mean() + 10e-10
+        true_preds_T = torch.tensor(true_preds)
+        #As PyTorch does not have a satisfactory way of computing cross entropy between two distributions (as opposed to labels), implement it from scratch
+        loss = - torch.sum(torch.mul(t_soft_preds, torch.log(s_soft_preds))).mean() + 10e-10 #Add small constant to prevent zeroes
+        #This computes the cross entropy between student and LABEL predictions rather than with the teacher
+        #The purpose of this is to verify whether the student is "learning" in terms of the original dataset (i.e. whether both the student-teacher and student-label losses are decreasing)
         true_labels_loss_func = nn.CrossEntropyLoss()
-        true_labels_loss = true_labels_loss_func(s_preds, true_preds)
-        print('TRUE LABEL CROSSENTROPY LOSS: ', true_labels_loss.item())
-        #Print tensor predictions for debugging
-        #print('STUDENT PREDICTIONS: \n', s_preds)
-        #print('SOFTMAX STUDENT PREDICTIONS: \n', s_soft_preds)
-        #print('TEACHER PREDICTIONS: \n', t_preds)
-        #print('SOFTMAX TEACHER PREDICTIONS: \n', t_soft_preds)
-        #print('TRUE PREDICTIONS: \n', true_preds)
+        true_labels_loss = true_labels_loss_func(s_preds, true_preds_T)
+        print('TRUE LABEL CROSSENTROPY LOSS: ', true_labels_loss)
         return loss
 
     #Define backward method (where the gradient of the loss is computed)
@@ -50,7 +43,7 @@ class CWTM_DistillationLoss(Function):
         weight_tensor = torch.divide(t_preds, t_label_sum)
         #Find the difference between the STUDENT probability distribution and the GROUND TRUTH probability distribution
         #One hot encode true predictions to do this
-        one_hot_encoded_true_labels = torch.nn.functional.one_hot(true_preds, num_classes = s_smax_preds.shape[1])
+        one_hot_encoded_true_labels = nn.functional.one_hot(true_preds, num_classes = s_smax_preds.shape[1])
         diff = torch.sub(s_smax_preds, one_hot_encoded_true_labels)
         #Convert to vector (remove extra dimension) to allow for element-wise multiplication
         weight_tensor.unsqueeze_(dim = 1)
@@ -62,6 +55,6 @@ class CWTM_DistillationLoss(Function):
         #Return gradient to update student parameters - neither the teacher nor the true preds must have their gradients updated (return None)
         return grad_input, None, None
 
-#If the script is run directly from the terminal, test the distillation loss/gradient on MNIST 
+#If the script is run directly from the terminal, test the distillation loss/gradient on MNIST via the testDistillation function from Test_Distillations.py
 if __name__ == "__main__":
-    testDistillation(CWTM_DistillationLoss, n_args = 3)
+    testDistillation(CWTM_DistillationLoss)

@@ -6,9 +6,9 @@ from fastai.vision.all import *
 from uniplot import plot
  
 #Sample Tensors Taken from Student Training to validate distillation loss function
-def testDistillation(loss_function, n_args):
+def testDistillation(loss_function):
     #Pass in sample tensors to determine whether the forward and backward methods are working syntactically
-    passTensors(loss_function, n_args)
+    passTensors(loss_function)
     #Generate small neural network and backpropogate to determine whether backward is correctly calculating gradients (using FastAI and MNIST)
     mnist_dataset_url = untar_data(URLs.MNIST)
     #Create datablock and dataloader
@@ -48,7 +48,7 @@ def testDistillation(loss_function, n_args):
     teacher_learner = Learner(training_dataloader, teacher_model_architecture, metrics = ['accuracy', 'error_rate'])
     teacher_learner.load('TEST_TEACHER')
 
-    #Training loop for test learner 
+    #Training loop for test learner - only test on 1 epoch (change as needed)
     for epoch in range(1):
         #Distillation loss
         ds_losses = []
@@ -64,10 +64,7 @@ def testDistillation(loss_function, n_args):
             teacher_preds = teacher_learner.model(inputs)
             #Find loss
             loss_func = loss_function.apply
-            if n_args == 2:
-                loss = loss_func(student_preds, teacher_preds)
-            elif n_args == 3:
-                loss = loss_func(student_preds, teacher_preds, labels)
+            loss = loss_func(student_preds, teacher_preds, labels)
             #Compute gradients
             loss.backward()
             #Take step
@@ -76,7 +73,9 @@ def testDistillation(loss_function, n_args):
             ds_losses.append(loss.item())
             #Find maximum predictions (the actual classes predicted by the student)
             true_preds, true_pred_labels = torch.max(student_preds, dim = 1)
-            #Compute accuracy
+            #Compute accuracy - squeeze both tensors
+            true_pred_labels.squeeze_()
+            labels.squeeze_()
             acc = 100 * torch.eq(torch.tensor(true_pred_labels), torch.tensor(labels)).sum().item() / 64
             #Append for graphing
             accuracies.append(acc)
@@ -90,19 +89,16 @@ def testDistillation(loss_function, n_args):
                 print("TRAINING EPOCH [{}] LOSS: {} ACCURACY: {}".format(epoch, avg_batch_loss, avg_acc))    
                 break                                     
 
-def passTensors(loss_function, n_args):
+def passTensors(loss_function):
     #Initialize sample student, teacher, and true_y tensors with the same sizes as what will be used in the BAN (64 * 20)
     bs = 20
     t1 = torch.rand(bs, 20, requires_grad = True)
     t2 = torch.rand(bs, 20, requires_grad = True)
     t3 = torch.randint(low = 0, high = 19, size = (bs,))
-    # print("TENSOR 1: \n", t1)
-    # print("TENSOR 2: \n", t2)
     #Create loss object
     loss_func = loss_function.apply
-    #Calculate loss - as this method is also used to test the DKPP loss, check the number of required args
-    if n_args == 2: loss = loss_func(t1, t2) 
-    else: loss = loss_func(t1, t2, t3)
+    #Calculate loss
+    loss = loss_func(t1, t2, t3)
     #Calculate gradients from loss
     loss.retain_grad()
     loss.backward()

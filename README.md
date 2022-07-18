@@ -145,11 +145,11 @@ $$ \frac{1}{b}\sum^{b}_{s=1}\frac{\max p_{.,s}}{\sum^{b}_{u=1}\max p_{.,u}}(q_{\
 
 **We're weighting by the teacher's CONDFIDENCE - the highest probability as opposed to the probability of the correct label.** We simply want to see how certain the teacher is regarding its prediction for a given sample, irrespective of what the right answer is. On the other hand, we *do* care about the student's prediction for the correct value.
 
-What about DKPP? Same thing as the usual Derivative with the Dark Knowledge Term - **except this time, we will randomly permute the dark knowledge terms for different samples in the batch as to destroy the covariance matrix between the logits and maximum predictions for each sample via permutation function $\phi$.** In essence, if it truly is the Dark Knowledge hidden within logits that are important, *then we should see positive impact irrespective of what sample those logits belong too; since the relationships being taught are identical.* Putting it all together, this is what DKPP looks like:
+What about DKPP? Same thing as the usual Derivative with the Dark Knowledge Term - **except this time, we will randomly permute the dark knowledge terms for different samples in the batch as to destroy the covariance matrix between the logits and maximum predictions for each sample via permutation function $\phi$.** In essence, if it truly is the Dark Knowledge hidden within logits that are important, *then we should see positive impact irrespective of what sample those logits belong too; since the relationships being taught are identical.* **We permute all of the NON-ARGMAX LOGITS - all of the logits that are *not* the maximum prediction - and subtract them, whereas the argmax dimension remains identical** Putting it all together, this is what DKPP looks like:
 
 $$ \frac{1}{b}\sum^b_{s=1}\sum^n_{i=1}\frac{∂L_{i,s}}{∂z_{i,s}}=\frac{1}{b}\sum^{b}_{s=1}(q_{\ast,s}-\max p_{.,s})+\frac{1}{b}\sum^b_{s=1}\sum^{n-1}_{i=1}(q_{i,s}-\phi(p_{j,s})) $$
 
-That, is going to be the focus of this experiment - **determining whether Dark Knowledge is truly important with regards to Knowledge Distillation as compared to teacher confidence weighting**, and how this plays a role in the performance of BANs (which are really a special case of the aforementioned KD).
+That, is going to be the focus of this experiment - **determining whether Dark Knowledge is truly important with regards to Knowledge Distillation as compared to teacher confidence weighting**, and how this plays a role in the performance of BANs (which are really a special case of the aforementioned KD). **
 
 ### **🔍 Methdology and About the Experiment/Repo.**
 
@@ -171,8 +171,8 @@ Here's a quick diagram illustrating the architectures used (made in powerpoint, 
 
 🖱️**There are 3 key parts to this repository:**
 
-- `CWTM_Distillation_Loss.py` - implementation of the CWTM Distillation loss/gradient.
-- `DKPP_Distillation_Loss.py` - implementation of the DKPP Distillation loss/gradient computation.
+- `CWTM_Distillation.py` - implementation of the CWTM Distillation loss/gradient.
+- `DKPP_Distillation.py` - implementation of the DKPP Distillation loss/gradient computation.
 - `BANs_Experimentation.ipynb` - the site of the data processing, training, and experimentation process.
 - `Test_Distillations.py` - a testing script that a) passes in a couple sample tensors into the aforementioned distillation implementations and then trains them on MNIST to judge whether the gradients are flowing smoothly. **To test the distillations individually, run `python [distillation loss].py` in your terminal of choice.
 
@@ -181,6 +181,16 @@ Feel free to clone this repository and try out the notebook yourself! Due to a l
 *Special thanks to Tommaso Furlanello, Zachary C. Lipton, Micheal Tschannen, Laurent Itti, and Anima Anandkumar for the original BAN paper! This was AWESOME to replicate and drastically improved my understanding of Knowledge Distillation + how important a given network's learned representation is and how said represention can be relearned through "resynthesizing" information.*
 
 ### 🎯 **The Results.**
+
+As a proof of concept, I first ran a single BAN MLP for ~750 samples (1 epoch) on the MNIST dataset, just to make sure the gradients were flowing smoothly and the implementation of the above formulas was correct. After a couple days of debugging, the BAN obtained roughly 71% accuracy after a single epoch (compared to the teacher of the same architecture which was trained on 10). As test was meant mainly to validate that the entire setup + algorithmic implementation was up to standard, no more training was done (with the real test of the BAN being with the BAN ResNet and DenseNets). 
+
+**Here are the initial test results from the CWTM Distillation:**
+
+<p align = "center"><img src = "./images/BAN_MNIST_TEST_RESULTS.png"></img></p>
+
+**and from the DKPP Distillation:**
+
+
 
 ### 🔑 **Key Learnings and Thoughts.**
 
@@ -194,4 +204,4 @@ That being said, here are the top 3 learnings from this project:
 
 2. ⚒️ **Practically implementing more advanced gradient operations in PyTorch + understanding how gradient flow works and affects the performance of a model.** At one point, the BAN MLP model in the testing script stopped learning. More accurately, the loss function became constant, and further insepction revealed that the BAN was learning **to make CONFIDENT predictions as opposed to CORRECT predictions.** Attemtping to debug this, I took a look at the gradients - and found that **the prediction for the highest label approached 1 as the gradient approached -0.002**. The reason the gradients were sterilizing at that value? **The gradients updates, as by the paper were vectors as opposed to matricies**, meaning that each input had just one gradient per sample as opposed to one per class. I modified the CWTM and DKPP distillation gradients to include **the entire sample probability distribution** as opposed to **the difference between the true predictions**, ensuring that gradients flowed smoothly. You can see exactly what I did in `CWTM_Distillation_Loss.py` or by checking the commit history - this experience was critical and helped serve as a visceral reminder regarding the on-the-ground impact of the gradient functions wrote (as well as the valuable information that can be extracted from looking at *what values the gradient steralize at*).
    
-3. 🌊 **
+3. 🔁 **The mathematical foundations behind BANs and Knowledge Distillation.** Reading over the BAN paper led me down a rabbit hole of sorts regarding Knowledge Distillation - I ended up reading additional papers such as that on Relational KD, and was exposed to the reasoning behind the engineering of certain distillation losses, and how inter-parameter relationships in param space, such as the angles between coordinates, can be indicative of interconnections and their strength, as well as "blocks" of paramters (weights) that are connected together (which might hold further relational information regarding the repsentation learned by the teacher).Pursuing the understanding of both CWTM and DKPP distillations further rigorified my mathematical understanding of basic deep learning tasks such as classification, and provided valuable mathematical breeding ground for future ideas (such as memory-based optimizers). **I've broken down all of the math behind KD and Distillation losses in even further detail in my notes, which you can find at https://crysta.notion.site/BORN-AGAIN-NEURAL-NETWORKS-KNOWLEDGE-DISTILLATION-AND-BANs-a2c5b44ba5dd430e8ef954d9f9f854c0)**.
