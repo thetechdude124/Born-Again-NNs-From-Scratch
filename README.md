@@ -144,7 +144,7 @@ What this really means is that *the teacher model is performing a sort of **"con
 
 *Let $w$ represent an arbitrary weight - we multiply the weight calculated at sample $s$ divided by the weights across the entire minibatch (obtaining, as a percentage, the **magnitude (confidence) of the weight as compared to other weights in the batch**). In essence, we obtain how "confident" the teacher model is in a certain sample in comparison to its other predictions within the batch.*
 
-$$\frac{1}{b}\sum^b_{s=1}\frac{w_s}{Σ^{b}_{u=1} w_u}(q_{\ast,s}-y_{\ast,s})=\frac{1}{b}\sum^b_{s=1}\frac{p_{\ast,s}}{Σ^{b}_{u=1} p_{\ast,u}}(q_{\ast,s}-y_{\ast,s})$$
+$$\frac{1}{b}\sum^b_{s=1}\frac{w_s}{Σ_{u=1}^b w_u}(q_{\ast,s}-y_{\ast,s})=\frac{1}{b}\sum^b_{s=1}\frac{p_{\ast,s}}{Σ_{u=1}^b p_{\ast,u}}(q_{\ast,s}-y_{\ast,s})$$
 
 So, this begs the question - **does the success of Knowledge Distillation rely on the Dark Knowledge terms, or the confidence weighting shown here?**
 
