@@ -1,6 +1,12 @@
-### **🔁 BORN-AGAIN NEURAL NETWORKS (BANs) FROM SCRATCH.**
+# **🧠 BORN-AGAIN NEURAL NETWORKS (BANs) FROM SCRATCH.**
 
-Traditionally, information has been transferred between teacher and student models via a process known as **Knowledge Distillation** (KD). The goal of KD is simple - to train an initial teacher model, and then train a smaller student model in effort to achieve equivalent performances in a smaller parameter space. This student model can be trained in three main ways. The simplest and most common of these is known as **response-based distillation**, where the **distillation loss** is calculated simply by measuring the Euclidean distance between the student and teacher predictions. But, this of course is no guarantee that the student is learning the same underlying relationship as the teacher - **Feature-Based distillation** aims to solve this problem by attempting to match the **feature activations at the end of each layer** (attempting to coerce the student to learn similar feature maps to the teacher). More advanced and accurate still is **Relation-Based distillation** - rather than attempting to match the outputs of some layer or model, RKD aims to transfer **structural knowledge** regarding the relationship of different nodes (for example, calculating the angle formed by three given nodes or the distance between them). In any case, the **objective of such methods has always been to DISTILL information into a smaller form.**
+**🤝 Purpose: Implementing BANs with Teacher Confidence Weighting and Dark Knowledge Permutations from scratch, and testing said implementations between DenseNet-121 teachers and ResNet-18 student ensembles on the ImageWang Dataset (along with some MLP MNIST tests).**
+
+Traditionally, information has been transferred between teacher and student models via a process known as **Knowledge Distillation** (KD). The goal of KD is simple - to train an initial teacher model, and then train a smaller student model in effort to achieve equivalent performances in a smaller parameter space. 
+
+This student model can be trained in three main ways. The simplest and most common of these is known as **response-based distillation**, where the **distillation loss** is calculated simply by measuring the Euclidean distance between the student and teacher predictions. But, this of course is no guarantee that the student is learning the same underlying relationship as the teacher - **Feature-Based distillation** aims to solve this problem by attempting to match the **feature activations at the end of each layer** (attempting to coerce the student to learn similar feature maps to the teacher). 
+
+More advanced and accurate still is **Relation-Based distillation** - rather than attempting to match the outputs of some layer or model, RKD aims to transfer **structural knowledge** regarding the relationship of different nodes (for example, calculating the angle formed by three given nodes or the distance between them). In any case, the **objective of such methods has always been to DISTILL information into a smaller form.**
 
 This begs the question - if **smaller student models can achieve equivalent accuracies, can student models of equivalent size obtain HIGHER accuracies than their teachers?** This is, fundamentally, a Born-Again Neural Network (BAN) - a student model identically parametrized to its teacher, an effort that *surprisingly leads to the students (drastically) outperforming their respective teacher models.* This project will be replicating the original BAN paper (found at https://arxiv.org/pdf/1805.04770.pdf).
 
@@ -8,15 +14,15 @@ The purpose of this project/mini-experiment is to 1️⃣ **determine whether Da
 
 Let's get into it!
 
-### 🤔 **The Math Behind BANs - Confidence Weighting, Dark Knowledge, and More.**
+## 🤔 **The Math Behind BANs - Confidence Weighting, Dark Knowledge, and More.**
 
 For a typical BAN system, the training procedure looks something like this (where $x$ is the input data, $T$ represents the initial teacher model, $S_k$ represents the $k-th$ student learner, $f(x)$ represents the classifier learned by the model, and $y$ represents the generated predictions):
 
 <p align = "center"><img src = "./images/BAN_TRAINING_PROCEDURE.png"></img></p>
 
-In essence, each student learns from the student that came before it - student $S_k$ learns from student $S_{k-1}), and student $S_k$ learns from the initial teacher $T$. Once this ensemble has been trained, there are two options: one can either simply take the final student model, or one can "batch" the student models together into **a model ensemble**, where for a given input, the predictions of each model within the ensemble are averaged (or combined in some other way) to generate the final prediction. Generally speaking, model ensembles are prone to **higher accuracies** as they cover a larger proportion of hypothesis space, and thus can fit a wider set of distributions. 
+In essence, each student learns from the student that came before it - student $S_k$ learns from student $S_{k-1}$), and student $S_k$ learns from the initial teacher $T$. Once this ensemble has been trained, there are two options: one can either simply take the final student model, or one can "batch" the student models together into **a model ensemble**, where for a given input, the predictions of each model within the ensemble are averaged (or combined in some other way) to generate the final prediction. Generally speaking, model ensembles are prone to **higher accuracies** as they cover a larger proportion of hypothesis space, and thus can fit a wider set of distributions. 
 
-#### **👆 What's the point of BANs?**
+### **👆 What's the point of BANs?**
 
 Fundamentally, the idea of the BAN is that **the teacher model's activations and end prediction distribution (i.e. the probability distribution of whatever predictions have been generated) contain critical information in ADDITION to the training set that can result in better predictions.** Analogically, it is much like a student learning not only the required material, but additional information beyond said material that may drastically boost their academic performance. Mathematically, this operates on the principle that **minimizing the LOSS FUNCTION of a given task is not necessarily the same as minimizing generalization error.**
 
@@ -24,15 +30,15 @@ While a teacher model may have drastically minimized the loss function, this doe
 
 So, if we were to learn **from both the training set AND the teacher**, we increase the amount of potentially relevant available information - the student can now use the teacher's predictions and learned patterns as a starting point, potentially learning more advanced and accurate classifiers.
 
-#### **🪄Dark Knowledge - and why it matters.**
+### **🪄Dark Knowledge - and why it matters.**
 
 Let's say that a certain model is trying to classify a dog, train, car, and cat. Let's say that we want to test the model on the picture of a dog. When we pass in this image and apply the SoftMax activation, we'll get something like this:
 
-*Quick refresher - the SoftMax activation takes a set of input values, and changes them into probabilities between 0 and 1. For a given vector $z_i$, $\sigma$ (SoftMax) $z_i$ is given by:*
+*Quick refresher - the SoftMax activation takes a set of input values, and changes them into probabilities between 0 and 1. For a given vector* $z_i$ *,* $\sigma$ *(SoftMax)* $z_i$ *is given by:*
 
-$$ \sigma(z_i) = \frac{e^{z_{i}}}{\sum_{j=1}^K e^{z_{j}}} \ \ \ for\ i=1,2,\dots,K $$
+$$\sigma(z_i) = \frac{e^{z_{i}}}{\sum_{j=1}^K e^{z_{j}}} \ \ \ for\ i=1,2,\dots,K$$
 
-*In other words - for each logit, it is simply $E^{prob}$ divided by the SUM of $e$ raised to all of the other probabilities. This function will be important later!*
+*In other words - for each logit, it is simply* $e^{prob}$ *divided by the SUM of* $e$ *raised to all of the other probabilities. This function will be important later!*
 
 <center>
 
@@ -50,7 +56,7 @@ It's pretty simple - all we need to do is **divide the probability by some tempe
 
 $$ \sigma(z_i) = \frac{e^{\frac{z_{i}}{T}}}{\sum_{j=1}^K e^{\frac{z_{j}}{T}}} \ \ \ for\ i=1,2,\dots,K $$
 
-Now, if we apply an arbitrarily high temperature to our previous distribution: (*these values are just for demonstration purposes and NOT REAL!*)
+Now, if we apply an arbitrarily high temperature to our previous distribution: (*note that values are just for demonstration purposes and not real*)
 
 <center>
 
@@ -78,7 +84,7 @@ If this Dark Knowledge (DK) hypothesis holds true, then **it makes sense that tr
 
 Let's explore this further.
 
-#### 📚 **Is Dark Knowledge Truly Important? Confidence Weighting.**
+### 📚 **Is Dark Knowledge Truly Important? Confidence Weighting.**
 
 Remember how I said that the SoftMax function would be useful? Now's the time to use it.
 
@@ -113,13 +119,13 @@ Now that we know the partial derivative of the loss function iterating over one 
 
 $$ \ell(x_1,t_1..x_b,t_b)=\frac{1}{b}\sum^{b}_{s=1}\ell(x_s,t_s) $$
 
-So, if we wanted to find the gradient of this loss over the batch, we would simply find the average gradient across all the PREDICTED samples, right (the predicted sample being the highest probability)? In other words, we would take $q_*-p_*$ for each sample in the minibatch and then average it. This yields:
+So, if we wanted to find the gradient of this loss over the batch, we would simply find the average gradient across all the PREDICTED samples, right (the predicted sample being the highest probability)? In other words, we would take $q_{\ast}-p_{\ast}$ for each sample in the minibatch and then average it. This yields:
 
-$$ \frac{1}{b}\sum^b_{s=1}\frac{∂L_{i,s}}{∂z_{i,s}}=\frac{1}{b}\sum^{b}_{s=1}(q_{\ast,s}-p_{\ast,s}) $$
+$$ \frac{1}{b}\sum^{b}_{s=1}\frac{∂L_{i,s}}{∂z_{i,s}}=\frac{1}{b}\sum^{b}_{s=1}(q_{\ast,s}-p_{\ast,s}) $$
 
 But, this is missing some key information - namely, **the Dark Knowledge hidden inside the remainder of the probability distribution.** We are computing the gradients over **the true predictions, but NOT the gradients for each probability inside each sample.** We can fix this by adding another term - a **Dark Knowledge Term** - that, **for each sample, iterates over *all logits* rather than just the predicted (max) ones and calculates *their difference from the teacher logits.***
 
-$$ \frac{1}{b}\sum^b_{s=1}\sum^n_{i=1}\frac{∂L_{i,s}}{∂z_{i,s}}=\frac{1}{b}\sum^{b}_{s=1}(q_{\ast,s}-p_{\ast,s})+\frac{1}{b}\sum^b_{s=1}\sum^{n-1}_{i=1}(q_{i,s}-p_{i,s}) $$
+$$ \frac{1}{b}\sum^{b}_{s=1}\sum^n_{i=1}\frac{∂L_{i,s}}{∂z_{i,s}}=\frac{1}{b}\sum^{b}_{s=1}(q_{\ast,s}-p_{\ast,s})+\frac{1}{b}\sum^{b}_{s=1}\sum^{n-1}_{i=1}(q_{i,s}-p_{i,s}) $$
 
 Remember - usually, we would **just consider the first term** (the difference between the predictions for the correct classes). But, if the Dark Knowledge Hypothesis is correct, then the remainder of the probability distribution matters as well. So, we must **also consider these differences for each individual logit as well.**
 
@@ -127,7 +133,7 @@ Let's consider something - we know that the **ground truth prediction for the co
 
 $$ \frac{1}{b}\sum^b_{s=1}(q_{\ast,s}-p_{\ast,s}y_{\ast,s}) $$
 
-We know that $p_{\ast,s}$ (the teacher's predictions for the highest label) will **almost never be 1** - it may reach *a value approximating that* (like 0.9998), but the probability of it achieving one is extremely low. **Importantly, the closer this value is to one** (the condition where if we were to take the limit of this function it would equal 1), **the closer this function becomes to the cross entropy derivative where we simply subtract $q_i$ by 1! 
+We know that $p_{\ast,s}$ (the teacher's predictions for the highest label) will **almost never be 1** - it may reach *a value approximating that* (like 0.9998), but the probability of it achieving one is extremely low. **Importantly, the closer this value is to one** (the condition where if we were to take the limit of this function it would equal 1), **the closer this function becomes to the cross entropy derivative where we simply subtract $q_i$ by 1!**
 
 What happens if $p_{\ast,s}$ is *not* a value close to one? Well, this indicates that **the teacher is not confident in its prediction**, and as a result, the **size of the gradient update will be closer to zero** (recall that *the student predictions will be less than one*) so this term becomes negative; if we subtract the student predictions by a smaller value, then **the gradient ends up closer to zero on average.** 
 
@@ -135,7 +141,7 @@ What this really means is that *the teacher model is performing a sort of **"con
 
 *Let $w$ represent an arbitrary weight - we multiply the weight calculated at sample $s$ divided by the weights across the entire minibatch (obtaining, as a percentage, the **magnitude (confidence) of the weight as compared to other weights in the batch**). In essence, we obtain how "confident" the teacher model is in a certain sample in comparison to its other predictions within the batch.*
 
-$$ \frac{1}{b}\sum^{b}_{s=1}\frac{w_s}{\sum^{b}_{u=1}w_u}(q_{\ast,s}-y_{\ast,s})=\frac{1}{b}\sum^{b}_{s=1}\frac{p_{\ast,s}}{\sum^{b}_{u=1}p_{\ast,u}}(q_{\ast,s}-y_{\ast,s}) $$
+$$ \frac{1}{b}\sum^{b}_{s=1}\frac{w_s}{\sum^{b}_{u=1} w_u}(q_{\ast,s}-y_{\ast,s})=\frac{1}{b}\sum^{b}_{s=1}\frac{p_{\ast,s}}{\sum^{b}_{u=1}p_{\ast,u}}(q_{\ast,s}-y_{\ast,s}) $$
 
 So, this begs the question - **does the success of Knowledge Distillation rely on the Dark Knowledge terms, or the confidence weighting shown here?**
 
@@ -147,11 +153,11 @@ $$ \frac{1}{b}\sum^{b}_{s=1}\frac{\max p_{.,s}}{\sum^{b}_{u=1}\max p_{.,u}}(q_{\
 
 What about DKPP? Same thing as the usual Derivative with the Dark Knowledge Term - **except this time, we will randomly permute the dark knowledge terms for different samples in the batch as to destroy the covariance matrix between the logits and maximum predictions for each sample via permutation function $\phi$.** In essence, if it truly is the Dark Knowledge hidden within logits that are important, *then we should see positive impact irrespective of what sample those logits belong too; since the relationships being taught are identical.* **We permute all of the NON-ARGMAX LOGITS - all of the logits that are *not* the maximum prediction - and subtract them, whereas the argmax dimension remains identical** Putting it all together, this is what DKPP looks like:
 
-$$ \frac{1}{b}\sum^b_{s=1}\sum^n_{i=1}\frac{∂L_{i,s}}{∂z_{i,s}}=\frac{1}{b}\sum^{b}_{s=1}(q_{\ast,s}-\max p_{.,s})+\frac{1}{b}\sum^b_{s=1}\sum^{n-1}_{i=1}(q_{i,s}-\phi(p_{j,s})) $$
+$$ \frac{1}{b}\sum^{b}_{s=1}\sum^n_{i=1}\frac{∂L_{i,s}}{∂z_{i,s}}=\frac{1}{b}\sum^{b}_{s=1}(q_{\ast,s}-\max p_{.,s})+\frac{1}{b}\sum^b_{s=1}\sum^{n-1}_{i=1}(q_{i,s}-\phi(p_{j,s})) $$
 
 That, is going to be the focus of this experiment - **determining whether Dark Knowledge is truly important with regards to Knowledge Distillation as compared to teacher confidence weighting**, and how this plays a role in the performance of BANs (which are really a special case of the aforementioned KD). **
 
-### **🔍 Methdology and About the Experiment/Repo.**
+## **🔍 Methdology and About the Experiment/Repo.**
 
 Fundamentally, this experiment is about testing performance of an ensemble of four student BANs on the ImageWang between those trained via the CWTM and DKPP distillation losses to determine their true importance. **One of the key critiscims of the original paper is that the experimentation process has been done primarily on CIFAR-10 and MNIST** (which, given the ability of even simple networks to achieve near state-of-the-art accuracies on them, is simply not a good way to validate findings), **so this implementation will test the findings on the more complex ImageWang dataset (a subset of the larger ImageNet dataset with both trivial and difficult classes).** 
 
@@ -178,9 +184,7 @@ Here's a quick diagram illustrating the architectures used (made in powerpoint, 
 
 Feel free to clone this repository and try out the notebook yourself! Due to a lack of compute, I conducted the Densenet121 to BAN Resnet18 experiment; it'd be interesting to see how other models perform in this regard (and if the BAN ResNet18 can even serve as a teacher model; as was done in the paper with a WideResNet28-1)!
 
-*Special thanks to Tommaso Furlanello, Zachary C. Lipton, Micheal Tschannen, Laurent Itti, and Anima Anandkumar for the original BAN paper! This was AWESOME to replicate and drastically improved my understanding of Knowledge Distillation + how important a given network's learned representation is and how said represention can be relearned through "resynthesizing" information.*
-
-### 🎯 **The Results.**
+## 🎯 **The Results.**
 
 As a proof of concept, I first ran a single BAN MLP for ~750 samples (1 epoch) on the MNIST dataset, just to make sure the gradients were flowing smoothly and the implementation of the above formulas was correct. After a couple days of debugging, the BAN obtained roughly 71% accuracy after a single epoch (compared to the teacher of the same architecture which was trained on 10). As test was meant mainly to validate that the entire setup + algorithmic implementation was up to standard, no more training was done (with the real test of the BAN being with the BAN ResNet and DenseNets). 
 
@@ -191,8 +195,7 @@ As a proof of concept, I first ran a single BAN MLP for ~750 samples (1 epoch) o
 **and from the DKPP Distillation:**
 
 
-
-### 🔑 **Key Learnings and Thoughts.**
+## 🔑 **Key Learnings and Thoughts.**
 
 Everything considered, this is probably the most advanced project I've done yet - not necessarily in terms of the end product/process, but in terms of understanding gradient flow and calculations from first-principles (having implemented those for both distillation functions), learning to place existing concepts and problems in different scenarios to reveal new behaviour (for instance, the paper took the regular dark knowledge distillation loss and considered what would happen if we were to involve $y_{\ast,s}$, revealing that the function was performing confidence weighting of sorts), and sheer debugging (how to handle different matrix operations, how grad shapes correspond to parameters, the problem with increasing model certainty, and more). 
 
@@ -200,8 +203,16 @@ Understanding the math straight from the paper also proved to be a challenge - I
 
 That being said, here are the top 3 learnings from this project:
 
-1. 🎓 **The true learned classifer of a neural network consists of multiple, building-block factions that each play a role in the end representation learner.** One of the most useful parts of Knowledge Distillation is that it **forces researchers to better understand what constitutes a given representation**, as one cannot distill something without understanding all the components that make it functional. The prime example of this would be Dark Knowledge - the relationships *between* the predictions of *all* classes are of equivalent (or perhaps greater) importance than that of obtaining the correct class. **How can we better understand and distill the relationships learned by classifiers?**
+1. 🎓 **The true learned classifer of a neural network consists of multiple, building-block factions that each play a role in the end representation learned.** One of the most useful parts of Knowledge Distillation is that it **forces researchers to better understand what constitutes a given representation**, as one cannot distill something without understanding all the components that make it functional. The prime example of this would be Dark Knowledge - the relationships *between* the predictions of *all* classes are of equivalent (or perhaps greater) importance than that of obtaining the correct class. **How can we better understand and distill the relationships learned by classifiers?**
 
 2. ⚒️ **Practically implementing more advanced gradient operations in PyTorch + understanding how gradient flow works and affects the performance of a model.** At one point, the BAN MLP model in the testing script stopped learning. More accurately, the loss function became constant, and further insepction revealed that the BAN was learning **to make CONFIDENT predictions as opposed to CORRECT predictions.** Attemtping to debug this, I took a look at the gradients - and found that **the prediction for the highest label approached 1 as the gradient approached -0.002**. The reason the gradients were sterilizing at that value? **The gradients updates, as by the paper were vectors as opposed to matricies**, meaning that each input had just one gradient per sample as opposed to one per class. I modified the CWTM and DKPP distillation gradients to include **the entire sample probability distribution** as opposed to **the difference between the true predictions**, ensuring that gradients flowed smoothly. You can see exactly what I did in `CWTM_Distillation_Loss.py` or by checking the commit history - this experience was critical and helped serve as a visceral reminder regarding the on-the-ground impact of the gradient functions wrote (as well as the valuable information that can be extracted from looking at *what values the gradient steralize at*).
    
 3. 🔁 **The mathematical foundations behind BANs and Knowledge Distillation.** Reading over the BAN paper led me down a rabbit hole of sorts regarding Knowledge Distillation - I ended up reading additional papers such as that on Relational KD, and was exposed to the reasoning behind the engineering of certain distillation losses, and how inter-parameter relationships in param space, such as the angles between coordinates, can be indicative of interconnections and their strength, as well as "blocks" of paramters (weights) that are connected together (which might hold further relational information regarding the repsentation learned by the teacher).Pursuing the understanding of both CWTM and DKPP distillations further rigorified my mathematical understanding of basic deep learning tasks such as classification, and provided valuable mathematical breeding ground for future ideas (such as memory-based optimizers). **I've broken down all of the math behind KD and Distillation losses in even further detail in my notes, which you can find at https://crysta.notion.site/BORN-AGAIN-NEURAL-NETWORKS-KNOWLEDGE-DISTILLATION-AND-BANs-a2c5b44ba5dd430e8ef954d9f9f854c0)**.
+
+4. 🔑 **The importance of compute and optimization.** As mentioned in the Results section, one of the key limitations of this project was available compute. Despite the losses and accuracies improving for all student ensembles, the fact that I was only able to train them for 10 epochs (due to the fact that I'm training these models on an Intel i3 10th gen as a student) limited the end results to just around 25% end accuracy, whereas simply training for somewhere near 100 if current trends continue would in all likelihood result in 90%+ accuracy on the given Imagewang dataset. I'll be looking into options like VMs and running multiple Google Colab instances to remove this as a barrier in the future. **For now, if you have the resources to do so, feel free to clone this repo and run the notebook cells yourself for a far larger number of epochs to further validate the findings!**
+
+Overall, this project was a catalyst for my understanding of deep learning and more advanced principles within the field. Now, I'm looking to take the knowledge I've learned over the last 3 projects + last year and leverage that to perform research of my own, with a mock paper published in the next few weeks. 
+
+Stay tuned, and enjoy the repo! 
+
+*Special thanks to Tommaso Furlanello, Zachary C. Lipton, Micheal Tschannen, Laurent Itti, and Anima Anandkumar for the original BAN paper (which can be found at https://arxiv.org/pdf/1805.04770.pdf)! This was AWESOME to replicate and drastically improved my understanding of Knowledge Distillation, deep learning, and how networks learn different representations.*
