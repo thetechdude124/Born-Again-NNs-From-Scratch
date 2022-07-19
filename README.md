@@ -10,7 +10,7 @@ More advanced and accurate still is **Relation-Based distillation** - rather tha
 
 This begs the question - if **smaller student models can achieve equivalent accuracies, can student models of equivalent size obtain HIGHER accuracies than their teachers?** This is, fundamentally, a Born-Again Neural Network (BAN) - a student model identically parametrized to its teacher, an effort that *surprisingly leads to the students (drastically) outperforming their respective teacher models.* This project will be replicating the original BAN paper (found at https://arxiv.org/pdf/1805.04770.pdf).
 
-The purpose of this project/mini-experiment is to 1️⃣ **determine whether Dark Knowledge-based relationships (as we'll discuss further) are instrumental in how networks learn and generate predictions**, 2️⃣ understand from first-principles the theoretical nature of BAN distillation losses (Confidence Weighting by Teacher Max and Dark Knowledge with Permuted Predictions) and their practical nature via **implementing them from scratch in PyTorch**, 3️⃣ further uncover why **BANs tend to achieve higher overall accuracies when compared to teachers** (i.e. "re-learning" identical relationships but in more "effective" terms), and 4️⃣ **test the Dark Knowledge and BAN accuracy hypothesis via training an ensemble of 5 WideResNet 28-1 student models against a DenseNet 121 teacher**.
+The purpose of this project/mini-experiment is to 1️⃣ **determine whether Dark Knowledge-based relationships (as we'll discuss further) are instrumental in how networks learn and generate predictions**, 2️⃣ understand from first-principles the theoretical nature of BAN distillation losses (Confidence Weighted by Teacher Max and Dark Knowledge with Permuted Predictions) and their practical nature via **implementing them from scratch in PyTorch**, 3️⃣ further uncover why **BANs tend to achieve higher overall accuracies when compared to teachers** (i.e. "re-learning" identical relationships but in more "effective" terms), and 4️⃣ **test the Dark Knowledge and BAN accuracy hypothesis via training an ensemble of 5 WideResNet 28-1 student models against a DenseNet 121 teacher**.
 
 Let's get into it!
 
@@ -20,7 +20,7 @@ For a typical BAN system, the training procedure looks something like this (wher
 
 <p align = "center"><img src = "./images/BAN_TRAINING_PROCEDURE.png"></img></p>
 
-In essence, each student learns from the student that came before it - student $S_k$ learns from student $S_{k-1}$), and student $S_k$ learns from the initial teacher $T$. Once this ensemble has been trained, there are two options: one can either simply take the final student model, or one can "batch" the student models together into **a model ensemble**, where for a given input, the predictions of each model within the ensemble are averaged (or combined in some other way) to generate the final prediction. Generally speaking, model ensembles are prone to **higher accuracies** as they cover a larger proportion of hypothesis space, and thus can fit a wider set of distributions. 
+In essence, each student learns from the student that came before it - student $S_k$ learns from student $S_{k-1}$, and student $S_k$ learns from the initial teacher $T$. Once this ensemble has been trained, there are two options: one can either simply take the final student model, or one can "batch" the student models together into **a model ensemble**, where for a given input, the predictions of each model within the ensemble are averaged (or combined in some other way) to generate the final prediction. Generally speaking, model ensembles are prone to **higher accuracies** as they cover a larger proportion of hypothesis space, and thus can fit a wider set of distributions. 
 
 ### **👆 What's the point of BANs?**
 
@@ -32,7 +32,7 @@ So, if we were to learn **from both the training set AND the teacher**, we incre
 
 ### **🪄Dark Knowledge - and why it matters.**
 
-Let's say that a certain model is trying to classify a dog, train, car, and cat. Let's say that we want to test the model on the picture of a dog. When we pass in this image and apply the SoftMax activation, we'll get something like this:
+Let's say that a certain model is trying to classify a dog, train, car, and cat, and to test the model, we give it a picture of a dog. When we pass in this image and apply the SoftMax activation, we'll get something like this:
 
 *Quick refresher - the SoftMax activation takes a set of input values, and changes them into probabilities between 0 and 1. For a given vector* $z_i$ *,* $\sigma$ *(SoftMax)* $z_i$ *is given by:*
 
@@ -48,11 +48,11 @@ $$ \sigma(z_i) = \frac{e^{z_{i}}}{Σ_{j=1}^{K} e^{z_{j}}} \ \ \ for\ i=1,2,\dots
 
 </center>
 
-Now, if we were trying to extract a prediction from the model, the end answer is simple - the model obviously predicted dog (with the highest probability at 90%). We might even try to use this information for KD - simply checking if **both the teacher and student model predicted dog as their end prediction.**
+Now, if we were trying to extract a prediction from the model, the end answer is simple - the model obviously predicted dog (with the highest probability at 90%). We might even try to use this information as our Knowledge Distillation approach - simply checking if **both the teacher and student model predicted dog as their end prediction**, and using this information to determine how far off the student was from the teacher (the distillation loss).
 
 But, **there's a huge problem with this approach - it ignores the probabilities of the remainder of the labels. More accurately, it ignores the fact that the model stated that the given image was more likely to be a cat than a car, and more likely to be a car than a train.** This might be hard to tell because the numbers are so small - so, let's introduce something known as **temperature** in the above SoftMax formula so that we can see those other predictions better **without affecting the order of the predictions.**
 
-It's pretty simple - all we need to do is **divide the probability by some temperature constant $T$ to rescale the values.** The HIGHER the temperature, the **"softer" the distribution**, and the LOWER the temperature, the "sharper" (more drastic differences between labels) the distribution (generally speaking). Here's SoftMax with temperature:
+It's pretty simple - all we need to do is **divide each raw output by some temperature constant $T$ to rescale the values before applying softmax.** The HIGHER the temperature, the **"softer" the distribution**, and the LOWER the temperature, the "sharper" (more drastic differences between labels) the distribution (generally speaking). Here's SoftMax with temperature:
 
 $$ \sigma(z_i) = \frac{e^{\frac{z_{i}}{T}}}{Σ_{j=1}^{K} e^{\frac{z_{j}}{T}}} \ \ \ for\ i=1,2,\dots,K $$
 
@@ -78,7 +78,9 @@ In percentages for clarity:
 
 Now, we can **clearly see that the model believes that the image is more likely to be a cat than a car** - this indicates that the model **has learned a relationship: that animals are different from objects.** Other ANIMALS are more likely to be confused with other animals, whereas an animal is drastically less likely to be confused with an object like a car. 
 
-#### **This is dark knowledge - hidden relationships the model has learned that can be critical in completing the task at hand that can be found in its underlying probability distribution** learning that animals $\ne$ things is a critical first step in distinguishing the classes.
+#### **This is dark knowledge - hidden relationships the model has learned that can be critical in completing the task at hand that can be found in its underlying probability distribution**. In our example, the model had to first learn that animals $\ne$ things as a critical first step in distinguishing the classes.
+
+So, rather than our distillation loss just checking if both networks predicted the same value, it should instead encompass **the dark knowledge terms** (the remainder of the probabiltiy distribution) to capture the underlying dark knowledge that led the network to its end prediction.
 
 If this Dark Knowledge (DK) hypothesis holds true, then **it makes sense that transferring this DK between teachers and students should be critical in KD and in training BANs.** But, **is it really dark knowledge information transfer that makes knowledge distillation successful?**
 
@@ -86,15 +88,15 @@ Let's explore this further.
 
 ### 📚 **Is Dark Knowledge Truly Important? Confidence Weighting.**
 
-Remember how I said that the SoftMax function would be useful? Now's the time to use it.
+Remember how I said that the SoftMax function would be useful? Now's time to put it into (further) action.
 
-First, let's understand **cross entropy loss.** The SoftMax function is an **activation - it normalizes our logits, but does NOT tell us the loss.** This is where cross entropy comes in - it compares two SoftMax-activated distributions and **returns the error between the two.** The underlying logic is simple -> simply multiply **the true probability distribution** by the log (usually natural log) of the given distribution **for each value** (i.e. compare the dog values, then the car, train, and cat, etc.) and simply sum them up!
+First, let's understand **cross entropy loss.** The SoftMax function is an **activation - it normalizes our logits, but does NOT tell us the loss.** This is where cross entropy comes in - it compares two SoftMax-activated distributions and **returns the error between the two.** The underlying logic is simple -> simply multiply **the true probability distribution** by the log (usually natural log) of the given distribution **for each value** (i.e. compare the log of the predicted dog values with the actual dog predictions, then the car, train, and cat, etc.) and simply sum them up!
 
 $$ \ell(p, q) = -\sum_{\forall x}p(x)log(q(x)) $$ 
 
 ...where $p(x)$ is the true distribution and $q(x)$ is the predicted distribution.
 
-When we perform gradient descent, we must compute the **gradient or partial derivative** of this function with respect to the $i_{th}$ parameter $z_i$ - in other words, we must compute the value of $\frac{\partial \ell}{\partial z_i}$. Here's the cool part: **the partial derivative of the cross entropy loss function is just the current distribution minus the true distribution!** And, if we **expand both $q_i$ and $p_i$ to reveal how they were calculated** (remember that the SoftMax activation was applied first to obtain both $q_i$ and $p_i$ - we are simply expressing those two variables in terms of the SoftMax calculation), we get:
+When we perform gradient descent, we must compute the **gradient or partial derivative** of this function with respect to the $i_{th}$ parameter $z_i$ - in other words, we must compute the value of $\frac{\partial \ell}{\partial z_i}$. Here's the cool part: **the partial derivative of the cross entropy loss function is just the predicted distribution minus the true distribution!** And, if we **expand both $q_i$ and $p_i$ to reveal how they were calculated** (remember that the SoftMax activation was applied first to obtain both $q_i$ and $p_i$ - we are simply expressing those two variables in terms of the SoftMax calculation), we get:
 
 $$ \frac{\partial \ell_i}{\partial z_i}=q_i-p_i=\frac{e^{z_i}}{Σ_{j=1}^ne^{z_j}}-\frac{e^{t_i}}{Σ_{j=1}^ne^{t_j}} $$
 
@@ -110,17 +112,17 @@ Let's suppose for a second, that instead of the $i_{th}$ element of the predicti
 
 </center>
 
-Let's now draw our attention back to $p_i$, which is the SoftMax of the given element. Since we are on the highest element (the "true" prediction) and it perfectly matches the "target" distribution (the distribution of the actual dataset - **remember that the dataset, after being one-hot encoded, just has 1 for the true class and 0 for everything else**), then this term **will simply yield 1**!
+Let's now draw our attention back to $p_i$, which is the SoftMax of $i_{th}$ class prediction (the class predicted by the teacher). Since we are on the highest element (the "true" prediction) and it perfectly matches the "target" distribution (the distribution of the actual dataset (**remember that the dataset, after being one-hot encoded, just has 1 for the true class and 0 for everything else**), then this term **will simply yield 1**! The teacher has outputted a fully confident answer of 100% for a certain class, so its prediction for the highest probability class is 1. 
 
-So, the **partial derivative when the teacher's true prediction exactly matches the target distribution (and when we are iterating over that true prediction $*$)** is:
+As a result, the **partial derivative when the teacher's true prediction exactly matches the target distribution (and when we are iterating over that true prediction $*$)** is:
 
 $$ \frac{\partial \ell_i}{\partial z_i}=q_i-p_i=\frac{e^{z_i}}{Σ_{j=1}^ne^{z_j}}-1.0 $$
 
-Now that we know the partial derivative of the loss function iterating over one sample, let's consider what would happen if we were to iterate across not only the $i_th$ sample, but an entire batch of size $b$. Since we want to find the **average loss** for the entire batch, we can divide the sum of the loss function applied to $x_1, t_1...x_b, t_b$ (where $x_n$ is the prediction and $t_n$ is the true label) by the batch size. **So, the loss of an entire minibatch is given by:**
+Now that we know the partial derivative of the loss function when iterating over just one sample of logits (i.e. one prediction distribution), let's consider what would happen if we were to iterate across not only the $i_{th}$ sample, but an entire batch of size $b$. Since we want to find the **average loss** for the entire batch, we can divide the sum of the loss function applied to $x_1, t_1...x_b, t_b$ (where $x_n$ is the prediction and $t_n$ is the true label) by the batch size. **So, the loss of an entire minibatch is given by:**
 
 $$ \ell(x_1,t_1..x_b,t_b)=\frac{1}{b}\sum^{b}_{s=1}\ell(x_s,t_s) $$
 
-So, if we wanted to find the gradient of this loss over the batch, we would simply find the average gradient across all the PREDICTED samples, right (the predicted sample being the highest probability)? In other words, we would take $q_{\ast}-p_{\ast}$ for each sample in the minibatch and then average it. This yields:
+Let's keep going. If we wanted to find the gradient of this loss over the entire batch, we would simply find the average gradient across all the PREDICTED samples (the samples with the highest probability), right? In other words, we would take $q_{\ast}-p_{\ast}$ for each sample in the minibatch and then average it. This yields:
 
 $$\frac{1}{b}\sum^b_{s=1}\frac{\partial\ell_{i,s}}{\partial z_{i,s}}=\frac{1}{b}\sum^b_{s=1}(q_{\ast,s}-p_{\ast,s})$$
 
@@ -132,29 +134,31 @@ $$\frac{1}{b}\sum^b_{s=1}\sum^n_{i=1}\frac{\partial\ell_{i,s}}{\partial z_{i,s}}
 
 Remember - usually, we would **just consider the first term** (the difference between the predictions for the correct classes). But, if the Dark Knowledge Hypothesis is correct, then the remainder of the probability distribution matters as well. So, we must **also consider these differences for each individual logit as well.**
 
-Let's consider something - we know that the **ground truth prediction for the correct class in the dataset will always be 1.** A given dataset will be one-hot-encoded, or simply have the index of the correct class, but in either case if we were to compute the probabilities they would be (0, 0, 0, 1), where 1 is the probability of the correct class. The probability for the correct class will always be 1 - if $y$ represents the ground truth and $*$ represents the probability at the true class, then $y_{\ast,s}$ will always be one, and will be zero whenever it is not on the true class. **What happens if we combine this term $y_{\ast,s}$ with $p_{\ast,s}$**? It might look something like this:
+Let's consider something - we know that the **ground truth prediction for the correct class in the dataset will always be 1.** A given dataset will be one-hot-encoded, or simply have the index of the correct class, but in either case if we were to compute the probabilities they would be (0, 0, 0, 1), where 1 is the probability of the correct class. The probability for the correct class will always be 1 - if $y$ represents the ground truth labels (the actual classes in the dataset_ and $*$ represents the predicted value at the true class, then $y_{\ast,s}$ will always be one - ad then zero whenever it is not on the true class. **What happens if we combine this term $y_{\ast,s}$ with $p_{\ast,s}$**? It might look something like this:
 
 $$ \frac{1}{b}\sum^b_{s=1}(q_{\ast,s}-p_{\ast,s}y_{\ast,s}) $$
 
 We know that $p_{\ast,s}$ (the teacher's predictions for the highest label) will **almost never be 1** - it may reach *a value approximating that* (like 0.9998), but the probability of it achieving one is extremely low. **Importantly, the closer this value is to one** (the condition where if we were to take the limit of this function it would equal 1), **the closer this function becomes to the cross entropy derivative where we simply subtract $q_i$ by 1!**
 
-What happens if $p_{\ast,s}$ is *not* a value close to one? Well, this indicates that **the teacher is not confident in its prediction**, and as a result, the **size of the gradient update will be closer to zero** (recall that *the student predictions will be less than one*) so this term becomes negative; if we subtract the student predictions by a smaller value, then **the gradient ends up closer to zero on average.** 
+What happens if $p_{\ast,s}$ is *not* a value close to one? Well, this indicates that **the teacher is not confident in its prediction**, and this will impact the computed gradient (we subtract a smaller value from the student prediction).
 
-What this really means is that *the teacher model is performing a sort of **"confidence weighting" on the samples presented by the dataset - if the teacher is not confident in its predictions, the gradient updates will be closer to zero.*** This could be highly advantageous - if the teacher is not confident w.r.t a certain sample, it can prevent the student from prematurely entering a local minima or making disastourous updates based one or two awry samples. This, therefore, further aides in ensuring the validity and effectiveness of gradient updates and by extension can help to improve convergence. Let's step away from the example above and **re-write the above expression with $p_{\ast,s}$ as a true weight *for the entire expression* instead of just for $y_{\ast,s}$:**
+What this really means is that *the teacher model is performing a sort of **"confidence weighting" on the samples presented by the dataset - if neither the teacher nor the student are confident in their prediction our gradient update will be less severe (the difference between the two terms becomes smaller).*** This could be highly advantageous - if the teacher is not confident w.r.t a certain sample, it can prevent the student from prematurely entering a local minima or making disastourous updates based one or two awry samples. This, therefore, further aides in ensuring the validity and effectiveness of gradient updates and by extension can help to improve convergence. Let's step away from the example above and **re-write the above expression with $p_{\ast,s}$ as a true weight *for the entire expression* instead of just for $y_{\ast,s}$:**
 
-*Let $w$ represent an arbitrary weight - we multiply the weight calculated at sample $s$ divided by the weights across the entire minibatch (obtaining, as a percentage, the **magnitude (confidence) of the weight as compared to other weights in the batch**). In essence, we obtain how "confident" the teacher model is in a certain sample in comparison to its other predictions within the batch.*
+*Let* $w$ *represent an arbitrary weight - we multiply the weight calculated at sample* $s$ *divided by the weights across the entire minibatch, obtaining, as a percentage, the **size of the weight as compared to other weights in the batch**. In essence, we obtain how "confident" the teacher model is in a certain sample in comparison to its other predictions within the batch (a weight whose size makes up 25% of the entire batch is more confident than a weight that makes up 1%.*
 
 $$\frac{1}{b}\sum^b_{s=1}\frac{w_s}{Σ_{u=1}^b w_u}(q_{\ast,s}-y_{\ast,s})=\frac{1}{b}\sum^b_{s=1}\frac{p_{\ast,s}}{Σ_{u=1}^b p_{\ast,u}}(q_{\ast,s}-y_{\ast,s})$$
 
 So, this begs the question - **does the success of Knowledge Distillation rely on the Dark Knowledge terms, or the confidence weighting shown here?**
 
-To solve this, the paper devises *two different distillation losses* to test just this - **CWTM (Confidence Weighting by Teacher Max) and DKPP (Dark Knowledge with Permuted Predictions0).** The gradient of CWTM is almost exactly what we saw above; except, to preserve generality, we take the **highest predictions obtained by the teacher out of all predictions $.$ at a certain sample $s$:**
+To solve this, the paper devises *two different distillation losses* to test just this - **CWTM (Confidence Weighted by Teacher Max) and DKPP (Dark Knowledge with Permuted Predictions0).** The gradient of CWTM is almost exactly what we saw above; with one exception mentioned below:
 
 $$\frac{1}{b}\sum^b_{s=1}\frac{\max p_{.,s}}{Σ_{u=1}^b \max p_{.,u}}(q_{\ast,s}-y_{\ast,s}) $$
 
-**We're weighting by the teacher's CONDFIDENCE - the highest probability as opposed to the probability of the correct label.** We simply want to see how certain the teacher is regarding its prediction for a given sample, irrespective of what the right answer is. On the other hand, we *do* care about the student's prediction for the correct value.
+**We're weighting by the teacher's CONDFIDENCE - now, we're taking the highest probability as opposed to the probability of the correct label** (which is what we did in the last example). We simply want to see how confident the teacher is in its prediction for a given sample, irrespective of what the right answer is (what is the highest probability as opposed to what is the probability the teacher outputted for the correct label). On the other hand, we of course *do* care about the student's prediction for the correct value.
 
-What about DKPP? Same thing as the usual Derivative with the Dark Knowledge Term - **except this time, we will randomly permute all of the non-max logits of the teacher's predictions to destroy the covariance matrix between the maximum value and the rest of the logits via permutation function $\phi$.** In essence, if it truly is the Dark Knowledge hidden within logits that are important, *then we should see positive impact irrespective of whether those logits are with the right argmax value.* **We permute all of the NON-ARGMAX LOGITS - all of the logits that are *not* the maximum prediction - and subtract them, whereas the argmax value remain identical.** Looking at the previous table, this would be like replacing the probabilities outputted in the non-predicted classes (all the classes that aren't the maximum value, in that case dog) with probabilities that the model predicted on another sample. This destroys the covariance matrix between the predicted class and the remainder of the classes (all of them usually add up to one; without permuting we have no way of knowing whether its the dark knowledge encoded in the logits or just the fact that all the predictions are correlated that truly is creating improvement). Putting it all together, this is what DKPP looks like:
+What about DKPP? Same thing as the equation where we computed the derivative and added the dark knowledge terms - **except this time, we will randomly permute all of the non-max logits of the teacher's predictions to destroy the covariance matrix between the maximum value and the rest of the logits via permutation function $\phi$.** In essence, if it truly is the Dark Knowledge hidden within logits that are important, *then we should see positive impact irrespective of whether those logits are with the right argmax (predicted)value.* **We permute all of the NON-ARGMAX LOGITS - all of the logits that are *not* the maximum prediction - and subtract them from the student distribution, whereas the argmax value remain identical.** 
+
+Looking at the previous table, this would be like replacing the probabilities outputted in the non-predicted classes (all the classes that aren't the maximum value, in that case dog) with probabilities that the model predicted on another sample. This destroys the covariance matrix between the predicted class and the remainder of the classes (all of them usually add up to one; without permuting we have no way of knowing whether its the dark knowledge encoded in the logits or just the fact that all the predictions are correlated that truly is creating improvement). Putting it all together, this is what DKPP looks like:
 
 $$\frac{1}{b}\sum^b_{s=1}\sum^n_{i=1}\frac{\partial\ell_{i,s}}{\partial z_{i,s}}=\frac{1}{b}\sum^b_{s=1}(q_{\ast,s}-\max p_{.,s})+\frac{1}{b}\sum^b_{s=1}\sum_{i=1}^{n-1}(q_{i,s}-\phi(p_{j,s}))$$
 
@@ -164,7 +168,7 @@ That, is going to be the focus of this experiment - **determining whether Dark K
 
 **NOTE - To see the notebook, you may have to clone the repository as GitHub is traditionally not the best at rendering .ipynb files.**
 
-Fundamentally, this experiment is about testing performance of an ensemble of four student BANs on the ImageWang between those trained via the CWTM and DKPP distillation losses to determine their true importance. **One of the key critiscims of the original paper is that the experimentation process has been done primarily on CIFAR-10 and MNIST** (which, given the ability of even simple networks to achieve near state-of-the-art accuracies on them, is simply not a good way to validate findings), **so this implementation will test the findings on the more complex ImageWang dataset (a subset of the larger ImageNet dataset with both trivial and difficult classes).** 
+Fundamentally, this experiment is about testing performance of an ensemble of four student BANs on the ImageWang dataset between those trained via the CWTM and DKPP distillations to determine their true importance. **One of the key critiscims of the original paper is that the experimentation process has been done primarily on CIFAR-10 and MNIST** (which, given the ability of even simple networks to achieve near state-of-the-art accuracies on them, is simply not a good way to validate findings), **so this implementation will test the findings on the more complex ImageWang dataset (a subset of the larger ImageNet set):** 
 
 *Some samples from the ImageWang dataset:*
 
@@ -172,13 +176,13 @@ Fundamentally, this experiment is about testing performance of an ensemble of fo
 
 All loss functions have been implemented **from scratch** with PyTorch with custom backward methods - the forward methods of both these losses find the cross entropy between the student and teacher distributions (implemented from scratch too since PyTorch as of now only supports CE between labels and distributions), as you'll find in the repo. Check the individual files for more details on implementation!
 
-**The teacher model will be the complex DenseNet-121, whereas the student models will be the Resnet18 - the latter is known to be more simple due to skip connections going only to the incoming layer, and will help determine whether a strong teacher can teach a weaker student of roughly the same number of parameters and have the BAN student (resnet 18) exceed it in performance.**
+**The teacher model will be the DenseNet-121, whereas the student models will be the ResNet18 - the latter is known to be more simple due to skip connections going only to the incoming layer, and will help determine whether a strong teacher can teach a weaker student of roughly the same number of parameters and have the BAN student (resnet 18) exceed it in performance.**
 
 Here's a quick diagram illustrating the architectures used (made in powerpoint, images from https://towardsdatascience.com/creating-densenet-121-with-tensorflow-edbc08a956d8 and https://www.researchgate.net/figure/Architecture-of-the-ResNet-18-model-used-in-this-study_fig3_354432343):
 
 <p align = "center"><img src = "./images/DENSENET121_RESNET18_DIAGRAM.png"></img></p>
 
-(Note: check out this article https://medium.com/@smallfishbigsea/densenet-2b0889854a92 for more information on DenseNets and ResNets!)
+(Note: check out this article https://medium.com/@smallfishbigsea/densenet-2b0889854a92 for more information on DenseNets and ResNets! :D)
 
 🖱️**There are 3 key parts to this repository:**
 
@@ -187,11 +191,11 @@ Here's a quick diagram illustrating the architectures used (made in powerpoint, 
 - `BANs_Experimentation.ipynb` - the site of the data processing, training, and experimentation process.
 - `Test_Distillations.py` - a testing script that a) passes in a couple sample tensors into the aforementioned distillation implementations and then trains them on MNIST to judge whether the gradients are flowing smoothly. **To test the distillations individually, run `python [distillation loss].py` in your terminal of choice.
 
-Feel free to clone this repository and try out the notebook yourself! Due to a lack of compute, I conducted the Densenet121 to BAN Resnet18 experiment; it'd be interesting to see how other models perform in this regard (and if the BAN ResNet18 can even serve as a teacher model; as was done in the paper with a WideResNet28-1)!
+Feel free to clone this repository and try out the notebook yourself! Due to a lack of compute, I just conducted the Densenet121 to BAN ResNet18 experiment; it'd be interesting to see how other models perform in this regard (and if the BAN ResNet18 can even serve as a teacher model; as was done in the paper with a WideResNet28-1)!
 
 ## 🎯 **Results and Next Steps.**
 
-As a proof of concept, I first ran a single BAN MLP for ~750 samples (1 epoch) on the MNIST dataset, just to make sure the gradients were flowing smoothly and the implementation of the above formulas was correct. After a couple days of debugging, the BAN obtained roughly 71% accuracy after a single epoch (compared to the teacher of the same architecture which was trained on 10). As test was meant mainly to validate that the entire setup + algorithmic implementation was up to standard, no more training was done (with the real test of the BAN being with the BAN ResNet and DenseNets). 
+As a proof of concept, I first ran a single BAN MLP for ~750 samples (1 epoch) on the MNIST dataset, just to make sure the gradients were flowing smoothly and the implementation of the above formulas was correct. After a couple days of debugging, the BAN obtained roughly 71% accuracy after a single epoch (compared to the teacher of the same architecture which was trained on 10). As the test was meant mainly to validate that the entire setup + algorithmic implementation was up to standard, no more training was done (with the real test of the BAN being with the BAN ResNet and DenseNets). 
 
 **Here are the initial test results from the CWTM Distillation:**
 
@@ -203,7 +207,7 @@ As a proof of concept, I first ran a single BAN MLP for ~750 samples (1 epoch) o
 
 There are some interesting trends visible here. Right off the bat, its clear to see that the **DKPP distillation model completely fails to converge -** the gradient updates look much like random noise, and the training loss slowly increases over time (the model gets worse and worse as it sees new samples). 
 
-This is rather interesting. DKPP on harder tasks converged in the actual paper (and performed slightly better than CWTM), though despite this implementation being correct to my knowledge (having spent days rechecking, revising, and modifying the DKPP distillation to resemble that of the paper), it failed to converge on MNIST! **On the other hand, the CWTM distillation loss within 2000 steps was able to converge, and if training steps were continued, it is very well possible that the above accuracy increase would have continued.** Let me know if you have any suggestions/notice anything about this particular DKPP implementation that may explain this.
+This is rather interesting. DKPP on harder tasks converged in the actual paper (and performed slightly better than CWTM), though despite this implementation being correct to my knowledge (having spent days rechecking, revising, and modifying the DKPP distillation to resemble that of the paper), it failed to converge on MNIST! **On the other hand, the CWTM distillation loss within 2000 steps was able to converge, and if training steps were continued, it is very well possible that the seen accuracy increase would have continued.** Let me know if you have any suggestions/notice anything about this particular DKPP implementation that may explain this!
 
 Why did the DKPP distillation loss fail to converge? My hypothesis here is that the dark knowledge encoded within the non-argmax logits resulted in strong gradient updates insofar as the covariance matrix between the argmax and non-argmax logits was maintained. In other words, it was not the Dark Knowledge within the logits that was useful, but rather that gradient computations were being performed between the entire student and teacher samples as opposed to just the argmax logits. **The second the non-argmax logits were shuffled (and the covariance matrix destroyed), the added benefit that stemmed from increased data points per sample instead became random noise that simply dampened the true signal for each sample (as the permuted logits did not correspond to the given argmax value).** 
 
