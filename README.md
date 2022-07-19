@@ -162,6 +162,8 @@ That, is going to be the focus of this experiment - **determining whether Dark K
 
 ## **🔍 Methdology and About the Experiment/Repo.**
 
+**NOTE - To see the notebook, you may have to clone the repository as GitHub is traditionally not the best at rendering .ipynb files.**
+
 Fundamentally, this experiment is about testing performance of an ensemble of four student BANs on the ImageWang between those trained via the CWTM and DKPP distillation losses to determine their true importance. **One of the key critiscims of the original paper is that the experimentation process has been done primarily on CIFAR-10 and MNIST** (which, given the ability of even simple networks to achieve near state-of-the-art accuracies on them, is simply not a good way to validate findings), **so this implementation will test the findings on the more complex ImageWang dataset (a subset of the larger ImageNet dataset with both trivial and difficult classes).** 
 
 *Some samples from the ImageWang dataset:*
