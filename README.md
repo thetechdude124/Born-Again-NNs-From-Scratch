@@ -168,7 +168,7 @@ Fundamentally, this experiment is about testing performance of an ensemble of fo
 
 <p align = "center"><img src = "./images/IMAGEWANG_SAMPLE_IMAGES.png"></img></p>
 
-All loss functions have been implemented **from scratch** with PyTorch with custom backward methods - the forward methods of both these losses utilize `BCEWithLogitsLoss` (binary cross entropy) to calculate the ldstillation loss between the distribution of student and teacher losses, as you'll find in the repo. Check the individual files for more details on implementation!
+All loss functions have been implemented **from scratch** with PyTorch with custom backward methods - the forward methods of both these losses find the cross entropy between the student and teacher distributions (implemented from scratch too since PyTorch as of now only supports CE between labels and distributions), as you'll find in the repo. Check the individual files for more details on implementation!
 
 **The teacher model will be the complex DenseNet-121, whereas the student models will be the Resnet18 - the latter is known to be more simple due to skip connections going only to the incoming layer, and will help determine whether a strong teacher can teach a weaker student of roughly the same number of parameters and have the BAN student (resnet 18) exceed it in performance.**
 
@@ -187,7 +187,7 @@ Here's a quick diagram illustrating the architectures used (made in powerpoint, 
 
 Feel free to clone this repository and try out the notebook yourself! Due to a lack of compute, I conducted the Densenet121 to BAN Resnet18 experiment; it'd be interesting to see how other models perform in this regard (and if the BAN ResNet18 can even serve as a teacher model; as was done in the paper with a WideResNet28-1)!
 
-## 🎯 **The Results.**
+## 🎯 **Results and Next Steps.**
 
 As a proof of concept, I first ran a single BAN MLP for ~750 samples (1 epoch) on the MNIST dataset, just to make sure the gradients were flowing smoothly and the implementation of the above formulas was correct. After a couple days of debugging, the BAN obtained roughly 71% accuracy after a single epoch (compared to the teacher of the same architecture which was trained on 10). As test was meant mainly to validate that the entire setup + algorithmic implementation was up to standard, no more training was done (with the real test of the BAN being with the BAN ResNet and DenseNets). 
 
@@ -197,7 +197,7 @@ As a proof of concept, I first ran a single BAN MLP for ~750 samples (1 epoch) o
 
 **and from the DKPP Distillation:**
 
-<p align = "center"><img src = "./images/CWTM_BAN_MNIST_TEST_RESULTS.png"></img></p>
+<p align = "center"><img src = "./images/DKPP_BAN_MNIST_TEST_RESULTS.png"></img></p>
 
 There are some interesting trends visible here. Right off the bat, its clear to see that the **DKPP distillation model completely fails to converge -** the gradient updates look much like random noise, and the training loss slowly increases over time (the model gets worse and worse as it sees new samples). 
 
@@ -207,9 +207,23 @@ Why did the DKPP distillation loss fail to converge? My hypothesis here is that 
 
 If that hypothesis is true, then it suggests that we must find better ways of encoding the dark knowledge of teacher networks than through the non-argmax logits - potentially combining the above DKPP method with something such as Relational KD to get a more accurate picture of the relationships the teacher has learned.
 
-**Here are the results from the ResNet18 test:**
+**Here are the results from the ResNet18 test: (CWTM)**
 
+<p align = "center"><img src = "./images/IMAGEWANG_RESULTS.png"></img></p>
 
+Interestingly, all 4 students achieved roughly the same accuracy after 10 epochs of training. **Throughout this entire process, losses and accuracies for each student were improving steadily - but, due to compute limitations, I decicded to train for only 10 epochs** (which took a couple days of continuous training to accomplish, currently running on an Intel i3). Still, these results are fascinating -> as a proof of concept, the strong updates **(check the notebook for the exact updates)** suggest and verify the validity of the CWTM distillation method. 
+
+Given that DKPP failed to converge even on MNIST, it didn't make sense to spend another 3 days training the ResNet18 ensembles on said distillation - I'll be working to make my own modifications to DKPP to **improve convergence, and eventually retrain all student ensembles on a GPU-enabled device!**
+
+**🪜 Next Steps involve:**
+
+- **Rewriting the DKPP distillation loss and adding custom terms to improve convergence.** 
+- Figuring out the compute situation, and then **retraining all student ensembles for 100+ epochs for both CWTM and DKPP** to further improve the validity of the BAN performance findings.
+- Testing **different BAN combinations** - DenseNet and BAN WideResNet, WideResNet with DenseNet, DenseNet to DenseNet, and different architectures within each one of these combinations!
+
+This project marks the end of the "1 DL project a week" effort -> **I'll now be taking two weeks to work on a more advanced research problem, and publish a pseudo-paper with my findings (especially intrigued with memory-based optimziers and improving gradient flow).**
+
+Excited to see what comes next!
 
 ## 🔑 **Key Learnings and Thoughts.**
 
