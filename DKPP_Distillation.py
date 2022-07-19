@@ -23,8 +23,8 @@ class DKPP_DistillationLoss(Function):
         true_labels_loss_func = nn.CrossEntropyLoss()
         true_labels_loss = true_labels_loss_func(s_preds, torch.tensor(true_labels))
         print('TRUE LABEL CROSSENTROPY LOSS: ', true_labels_loss)
-        # print('STUDENT PREDICTIONS: \n', s_soft_preds)
-        # print('TEACHER PREDICTIONS: \n', t_soft_preds)
+        print('STUDENT PREDICTIONS: \n', s_soft_preds)
+        print('TEACHER PREDICTIONS: \n', t_soft_preds)
         return loss
 
     @staticmethod
@@ -77,16 +77,13 @@ class DKPP_DistillationLoss(Function):
         subtracted_logits = torch.where(permuted_DK_logits != highest_pred, s_smax_preds - permuted_DK_logits, permuted_DK_logits)
         #Normalize to obtain second term
         second_grad_term = (1 / batch_size) * subtracted_logits
-        #Element wise - for each element, if the value is the max value for that sample, leave it unchanged
-        #Otherwise randomly permute it (and the other non-argmax samples in that row) to serve as the logits for another sample
-        #permuted_DK_terms = torch.where(t_smax_preds != highest_pred, t_smax_preds[permuted_indexes], t_smax_preds)
-        #second_grad_term = (1 / batch_size) * torch.sub(s_smax_preds, permuted_DK_terms)
         #The first grad term is a vector of size bs, whereas the second grad term is of the size bs * n_classes - unsqueeze first term to (bs * 1)
         #As we must return bs * n_classes, add the vector to each column of the second grad term
         #Reverse order -> m + v instead of v + m
         first_grad_term.unsqueeze_(dim = 1)
         grad_input = torch.add(first_grad_term, second_grad_term)
         #No gradients needed for the teacher or true labels, return None 
+        print('GRADIENTS: ', grad_input)
         return grad_input, None, None
 
 #If script is run from terminal, run the testing script (test functino found in CWTM_Distillation_Loss.py)

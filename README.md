@@ -199,6 +199,16 @@ As a proof of concept, I first ran a single BAN MLP for ~750 samples (1 epoch) o
 
 <p align = "center"><img src = "./images/CWTM_BAN_MNIST_TEST_RESULTS.png"></img></p>
 
+There are some interesting trends visible here. Right off the bat, its clear to see that the **DKPP distillation model completely fails to converge -** the gradient updates look much like random noise, and the training loss slowly increases over time (the model gets worse and worse as it sees new samples). 
+
+This is rather interesting. DKPP on harder tasks converged in the actual paper (and performed slightly better than CWTM), though despite this implementation being correct to my knowledge (having spent days rechecking, revising, and modifying the DKPP distillation to resemble that of the paper), it failed to converge on MNIST! **On the other hand, the CWTM distillation loss within 2000 steps was able to converge, and if training steps were continued, it is very well possible that the above accuracy increase would have continued.** Let me know if you have any suggestions/notice anything about this particular DKPP implementation that may explain this.
+
+Why did the DKPP distillation loss fail to converge? My hypothesis here is that the dark knowledge encoded within the non-argmax logits resulted in strong gradient updates insofar as the covariance matrix between the argmax and non-argmax logits was maintained. In other words, it was not the Dark Knowledge within the logits that was useful, but rather that gradient computations were being performed between the entire student and teacher samples as opposed to just the argmax logits. **The second the non-argmax logits were shuffled (and the covariance matrix destroyed), the added benefit that stemmed from increased data points per sample instead became random noise that simply dampened the true signal for each sample (as the permuted logits did not correspond to the given argmax value).** 
+
+If that hypothesis is true, then it suggests that we must find better ways of encoding the dark knowledge of teacher networks than through the non-argmax logits - potentially combining the above DKPP method with something such as Relational KD to get a more accurate picture of the relationships the teacher has learned.
+
+**Here are the results from the ResNet18 test:**
+
 
 
 ## 🔑 **Key Learnings and Thoughts.**
