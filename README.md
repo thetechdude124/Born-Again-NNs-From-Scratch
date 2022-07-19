@@ -193,9 +193,12 @@ As a proof of concept, I first ran a single BAN MLP for ~750 samples (1 epoch) o
 
 **Here are the initial test results from the CWTM Distillation:**
 
-<p align = "center"><img src = "./images/BAN_MNIST_TEST_RESULTS.png"></img></p>
+<p align = "center"><img src = "./images/CWTM_BAN_MNIST_TEST_RESULTS.png"></img></p>
 
 **and from the DKPP Distillation:**
+
+<p align = "center"><img src = "./images/CWTM_BAN_MNIST_TEST_RESULTS.png"></img></p>
+
 
 
 ## 🔑 **Key Learnings and Thoughts.**
