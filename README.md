@@ -205,6 +205,10 @@ As a proof of concept, I first ran a single BAN MLP for ~750 samples (1 epoch) o
 
 <p align = "center"><img src = "./images/DKPP_BAN_MNIST_TEST_RESULTS.png"></img></p>
 
+**Combined:**
+
+<p align = "center"><img src = "./images/CWTM_DKPP_MNIST_RESULTS.png"></img></p>
+
 There are some interesting trends visible here. Right off the bat, its clear to see that the **DKPP distillation model completely fails to converge -** the gradient updates look much like random noise, and the training loss slowly increases over time (the model gets worse and worse as it sees new samples). 
 
 This is rather interesting. DKPP on harder tasks converged in the actual paper (and performed slightly better than CWTM), though despite this implementation being correct to my knowledge (having spent days rechecking, revising, and modifying the DKPP distillation to resemble that of the paper), it failed to converge on MNIST! **On the other hand, the CWTM distillation loss within 2000 steps was able to converge, and if training steps were continued, it is very well possible that the seen accuracy increase would have continued.** Let me know if you have any suggestions/notice anything about this particular DKPP implementation that may explain this!
